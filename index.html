@@ -11,6 +11,9 @@
     body { background-color: #000000; color: #d1d5db; font-family: 'Georgia', 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif JP', serif; }
     .font-mono { font-family: ui-monospace, Consolas, monospace; }
     
+    /* 修正ポイント1: 確実な非表示状態を担保するクラスを定義 */
+    .d-none { display: none !important; }
+    
     @keyframes bobble { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
     .anim-bobble { animation: bobble calc(2s / var(--game-speed)) infinite ease-in-out; }
     
@@ -32,8 +35,9 @@
     .vn-char.active { transform: translateY(0); opacity: 1; display: flex; filter: drop-shadow(0 0 20px rgba(0, 0, 0, 0.9)); }
   </style>
 </head>
-<body>
-  <div id="vn-mode" class="flex flex-col h-full bg-black relative">
+<body class="h-screen w-screen overflow-hidden m-0 p-0">
+  <!-- hiddenクラスをd-noneに置換して初期状態を制御 -->
+  <div id="vn-mode" class="d-none flex-col h-full bg-black relative">
     <div class="flex-grow flex items-end justify-center p-4 relative overflow-hidden bg-gradient-to-t from-black via-gray-900 to-black border-b border-gray-800">
       <div id="charLily" class="vn-char w-56 h-72 flex-col items-center justify-end mb-4 overflow-hidden drop-shadow-2xl">
         <img 
@@ -51,7 +55,7 @@
     </div>
   </div>
 
-  <div id="rpg-mode" class="hidden h-full flex-col max-w-4xl mx-auto w-full relative border-x border-gray-900 bg-black">
+  <div id="rpg-mode" class="d-none h-full flex-col max-w-4xl mx-auto w-full relative border-x border-gray-900 bg-black">
     <div onclick="openStatusModal()" class="bg-[#050505] border-b border-gray-800 p-2 flex flex-wrap justify-between items-center text-xs shrink-0 font-mono text-gray-400 cursor-pointer hover:bg-gray-900 transition-colors group relative">
       <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"></div>
       <div class="font-bold text-gray-200 flex items-center gap-2 tracking-widest uppercase">
@@ -80,7 +84,7 @@
         <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-0"></div>
         <div id="enemySprite" class="text-[6rem] md:text-[8rem] z-10 anim-bobble filter drop-shadow-2xl select-none grayscale-[0.2]">🏕️</div>
         
-        <div class="absolute bottom-4 w-3/4 max-w-md flex flex-col items-center z-10 hidden" id="enemyInfo">
+        <div class="absolute bottom-4 w-3/4 max-w-md flex flex-col items-center z-10 d-none" id="enemyInfo">
           <div id="enemyName" class="font-bold text-gray-300 text-xs tracking-[0.2em] font-serif uppercase mb-1 drop-shadow-md"></div>
           <div class="w-full bg-gray-900 h-1 border border-gray-700 overflow-hidden relative">
              <div id="enemyHpBar" class="bg-red-800 h-full w-full transition-all duration-300"></div>
@@ -91,26 +95,27 @@
       <div id="logArea" class="flex-1 min-h-0 p-3 overflow-y-auto text-[11px] md:text-sm leading-relaxed bg-black text-gray-400 font-mono"></div>
     </div>
 
+    <!-- メニュー群：Tailwindの hidden と flex の競合を防ぐため d-none を使用 -->
     <div class="bg-[#050505] border-t border-gray-800 p-2 md:p-3 h-[250px] md:h-[280px] shrink-0 font-mono relative">
-      <div id="baseMenu" class="grid grid-cols-2 gap-2 h-full hidden">
+      <div id="baseMenu" class="grid grid-cols-2 gap-2 h-full d-none">
         <button onclick="switchMenu('dungeonSelect')" class="bg-[#0a0a0a] border border-gray-700 hover:bg-[#111] text-gray-300 text-sm tracking-widest uppercase">探索へ出発</button>
         <button onclick="talkToTana()" class="bg-[#0a0a0a] border border-gray-700 hover:bg-[#111] text-gray-300 text-sm tracking-widest uppercase">リリーと話す</button>
         <button onclick="restAtBase()" class="bg-[#050505] border border-gray-800 hover:bg-[#111] text-gray-500 text-xs tracking-widest uppercase">休息 (回復)</button>
-        <button onclick="openStatusModal()" class="bg-[#050505] border border-gray-800 hover:bg-[#111] text-yellow-700 text-xs tracking-widest uppercase">所持遺물의確認</button>
+        <button onclick="openStatusModal()" class="bg-[#050505] border border-gray-800 hover:bg-[#111] text-yellow-700 text-xs tracking-widest uppercase">所持遺物の確認</button>
       </div>
 
-      <div id="dungeonSelect" class="hidden flex-col h-full">
+      <div id="dungeonSelect" class="flex-col h-full d-none">
         <div class="text-[10px] text-gray-500 mb-2 tracking-widest uppercase shrink-0">目的地を選択せよ</div>
         <div id="dungeonList" class="flex-grow grid grid-cols-1 gap-2 overflow-y-auto pr-2"></div>
         <button onclick="switchMenu('baseMenu')" class="mt-2 bg-black border border-gray-800 hover:bg-[#111] p-2 text-gray-500 text-[10px] uppercase w-full shrink-0">戻る</button>
       </div>
 
-      <div id="exploreMenu" class="hidden flex-col items-center justify-center h-full relative">
+      <div id="exploreMenu" class="flex flex-col items-center justify-center h-full relative d-none">
         <div class="text-[10px] text-gray-500 uppercase tracking-widest text-center w-full mb-2 shrink-0">次へ進む部屋を選択せよ</div>
         <div id="mapTreeContainer" class="flex-grow w-full flex flex-col justify-center relative"></div>
       </div>
 
-      <div id="battleMenu" class="hidden h-full flex flex-col justify-center">
+      <div id="battleMenu" class="h-full flex flex-col justify-center d-none">
         <div class="grid grid-cols-2 gap-2 h-full">
           <button onclick="executeAction('attack')" class="bg-[#1a0505] border border-[#4a1515] hover:bg-[#2a0808] text-red-200 text-sm tracking-widest uppercase">攻撃</button>
           <button onclick="executeAction('defend')" class="bg-[#051a15] border border-[#154a3a] hover:bg-[#082a22] text-cyan-200 text-sm tracking-widest uppercase">防御 (装甲展開)</button>
@@ -119,19 +124,19 @@
         </div>
       </div>
 
-      <div id="eventMenu" class="hidden h-full flex flex-col items-center justify-center gap-2 overflow-y-auto px-4">
+      <div id="eventMenu" class="h-full flex flex-col items-center justify-center gap-2 overflow-y-auto px-4 d-none">
         <div class="text-[10px] text-purple-400 uppercase tracking-widest mb-1">選択せよ</div>
         <div id="eventOptions" class="w-full max-w-sm flex flex-col gap-2"></div>
       </div>
 
-      <div id="rewardMenu" class="hidden h-full flex flex-col items-center justify-start overflow-y-auto pt-1">
+      <div id="rewardMenu" class="h-full flex flex-col items-center justify-start overflow-y-auto pt-1 d-none">
         <div class="text-[10px] text-yellow-600 uppercase tracking-widest mb-2 shrink-0">遺物を一つ選べ</div>
         <div id="rewardOptions" class="w-full max-w-lg flex flex-col gap-2"></div>
       </div>
     </div>
   </div>
 
-  <div id="statusModal" class="hidden fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 font-mono">
+  <div id="statusModal" class="d-none fixed inset-0 z-50 bg-black/90 flex-col items-center justify-center p-4 font-mono">
     <div class="bg-[#050505] border border-gray-700 w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl relative">
       <button onclick="closeStatusModal()" class="absolute top-2 right-2 text-gray-500 hover:text-white text-xl leading-none">&times;</button>
       
@@ -175,8 +180,10 @@ class EventManager {
     const list = this.listeners[eventName] || [];
     for (let l of list) {
       if (l.maxTrigger > 0 && l.currentTriggers >= l.maxTrigger) continue;
-      try { ctx = l.cb(ctx, this); } catch(e) { console.error(e); }
+      
+      // 修正ポイント2: 無限ループ（再帰時のトリガー抜け）を防ぐため、コールバック実行前にカウントを増やす
       l.currentTriggers++;
+      try { ctx = l.cb(ctx, this); } catch(e) { console.error(e); }
     }
     this.depth--;
     return ctx;
@@ -270,8 +277,8 @@ const ScenarioData = {
 };
 
 function startVN(stepId) {
-  document.getElementById('rpg-mode').classList.add('hidden'); 
-  document.getElementById('vn-mode').classList.remove('hidden'); 
+  document.getElementById('rpg-mode').classList.add('d-none'); 
+  document.getElementById('vn-mode').classList.remove('d-none'); 
   document.getElementById('vn-mode').classList.add('flex');
   GameState.currentDialogStep = stepId; 
   runDialogStep();
@@ -309,9 +316,9 @@ function runDialogStep() {
 }
 
 function handleVNAction(action) {
-  document.getElementById('vn-mode').classList.add('hidden'); 
+  document.getElementById('vn-mode').classList.add('d-none'); 
   document.getElementById('vn-mode').classList.remove('flex');
-  document.getElementById('rpg-mode').classList.remove('hidden'); 
+  document.getElementById('rpg-mode').classList.remove('d-none'); 
   document.getElementById('rpg-mode').classList.add('flex');
   
   if (action === 'startRPG') { 
@@ -557,13 +564,14 @@ function generateDungeonMap() {
   return floorNodes[0][0]; 
 }
 
+// 修正ポイント3: d-none クラスを用いてメニューの表示/非表示を厳格に管理する
 function switchMenu(menuId) {
   ['baseMenu', 'dungeonSelect', 'exploreMenu', 'battleMenu', 'eventMenu', 'rewardMenu'].forEach(id => {
     const el = document.getElementById(id);
-    if(el) el.classList.add('hidden');
+    if(el) el.classList.add('d-none');
   });
   const target = document.getElementById(menuId);
-  if(target) target.classList.remove('hidden');
+  if(target) target.classList.remove('d-none');
   
   if (menuId === 'dungeonSelect') {
     renderDungeonList();
@@ -578,6 +586,7 @@ function logMsg(msg, colorClass = "text-gray-400") {
   div.innerHTML = msg;
   area.appendChild(div);
   
+  // スクロール追従を確実に実行
   requestAnimationFrame(() => {
     area.scrollTop = area.scrollHeight;
   });
@@ -616,7 +625,18 @@ window.returnToBase = function() {
   currentDungeon = null; 
   currentMapNode = null;
   const enemyInfo = document.getElementById('enemyInfo');
-  if(enemyInfo) enemyInfo.classList.add('hidden');
+  if(enemyInfo) enemyInfo.classList.add('d-none');
+  
+  // ▼▼ 追加: ビジュアルビューとスプライトを初期状態（拠点）にリセット ▼▼
+  const visualView = document.getElementById('visualView');
+  if (visualView) {
+    visualView.className = "h-[45%] md:h-[55%] shrink-0 w-full border-b border-gray-800 relative overflow-hidden flex items-center justify-center transition-colors duration-500 bg-[#0a0a0a]";
+  }
+  const sprite = document.getElementById('enemySprite');
+  if (sprite) {
+    sprite.textContent = "🏕️";
+  }
+  // ▲▲ 追加ここまで ▲▲
   
   document.getElementById('locationName').textContent = "拠点"; 
   document.getElementById('logArea').innerHTML = "";
@@ -690,7 +710,7 @@ function startDungeonExplore() {
 function showExploreMenu() {
   switchMenu('exploreMenu');
   const enemyInfo = document.getElementById('enemyInfo');
-  if(enemyInfo) enemyInfo.classList.add('hidden');
+  if(enemyInfo) enemyInfo.classList.add('d-none');
   
   const visualView = document.getElementById('visualView');
   if(visualView) visualView.className = "h-[45%] md:h-[55%] shrink-0 w-full border-b border-gray-800 relative overflow-hidden flex items-center justify-center transition-colors duration-500 bg-[#0a0a0a]";
@@ -809,7 +829,7 @@ function startBattle(type) {
   isEnemyTurn = false;
   switchMenu('battleMenu');
   const enemyInfo = document.getElementById('enemyInfo');
-  if(enemyInfo) enemyInfo.classList.remove('hidden');
+  if(enemyInfo) enemyInfo.classList.remove('d-none');
   
   const visualView = document.getElementById('visualView');
   
@@ -1075,12 +1095,12 @@ window.openStatusModal = function() {
     });
   }
   
-  modal.classList.remove('hidden');
+  modal.classList.remove('d-none');
 };
 
 window.closeStatusModal = function() {
   const modal = document.getElementById('statusModal');
-  if(modal) modal.classList.add('hidden');
+  if(modal) modal.classList.add('d-none');
 };
 
 window.onload = () => { 
