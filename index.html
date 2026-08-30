@@ -724,6 +724,10 @@ function showExploreMenu() {
 function renderNextRooms() {
   const container = document.getElementById('mapTreeContainer');
   if(!container) return;
+  
+  // 【追加】マップ再描画時にクリック判定を復活させる
+  container.style.pointerEvents = 'auto'; 
+  
   container.innerHTML = '';
   
   if (!currentMapNode || currentMapNode.next.length === 0) return; 
@@ -803,6 +807,10 @@ function renderNextRooms() {
 }
 
 function enterRoom(nextIndex) {
+  // 【追加】マップコンテナのクリックを無効化して連打を防ぐ
+  const container = document.getElementById('mapTreeContainer');
+  if (container) container.style.pointerEvents = 'none';
+
   if (!currentMapNode.next[nextIndex]) return;
   currentMapNode = currentMapNode.next[nextIndex];
   const room = currentMapNode.roomData;
@@ -988,6 +996,7 @@ function startEvent() {
   b1.className = "bg-[#050505] border border-gray-700 hover:bg-[#111] p-3 text-gray-300 w-full uppercase text-xs";
   b1.innerText = "血を捧げる (最大HPを半減し、遺物を得る)";
   b1.onclick = () => {
+    container.style.pointerEvents = 'none'; // 【追加】連打防止
     const cost = Math.floor(player.maxHp * 0.5);
     player.maxHp = Math.max(1, player.maxHp - cost);
     player.hp = Math.min(player.hp, player.maxHp);
@@ -1000,6 +1009,7 @@ function startEvent() {
   b2.className = "bg-black border border-gray-800 hover:bg-[#111] p-3 text-gray-500 w-full uppercase text-xs";
   b2.innerText = "立ち去る";
   b2.onclick = () => {
+    container.style.pointerEvents = 'none'; // 【追加】連打防止
     logMsg("> その場を立ち去った。", "text-gray-500");
     showExploreMenu();
   };
@@ -1021,6 +1031,7 @@ function startRest() {
   b1.className = "bg-[#050505] border border-gray-700 hover:bg-[#111] p-3 text-gray-300 w-full uppercase text-xs";
   b1.innerText = "修行する (恒久的に攻撃力+5)";
   b1.onclick = () => {
+    container.style.pointerEvents = 'none'; // 【追加】連打防止
     player.baseStats.atk += 5;
     calcStats();
     logMsg("> 攻撃力が 5 上昇した。", "text-yellow-500");
@@ -1046,7 +1057,10 @@ function showRewardScreen() {
      const btn = document.createElement('button');
      btn.className = "bg-black border border-gray-800 hover:bg-[#111] p-3 text-gray-500 w-full uppercase text-xs";
      btn.innerText = "進む (もう遺物はない)";
-     btn.onclick = () => showExploreMenu();
+     btn.onclick = () => {
+       container.style.pointerEvents = 'none'; // 【追加】連打防止
+       showExploreMenu();
+     };
      container.appendChild(btn);
      return;
   }
@@ -1057,6 +1071,9 @@ function showRewardScreen() {
      btn.className = "bg-[#050505] border border-gray-700 hover:bg-gray-800 p-3 text-left w-full card-hover";
      btn.innerHTML = `<span class="text-xl mr-2">${art.icon}</span><span class="text-gray-200 font-bold uppercase text-xs tracking-widest">${art.name}</span><br><span class="text-[10px] text-gray-500 uppercase">${art.desc}</span>`;
      btn.onclick = () => {
+        // 【追加】コンテナ全体のクリックを無効化して連打を防ぐ
+        container.style.pointerEvents = 'none'; 
+        
         logMsg(`> [${art.name}] を獲得した。`, "text-yellow-500");
         player.passives.push(art);
         rebuildPassives();
