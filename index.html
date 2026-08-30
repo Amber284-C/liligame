@@ -1,0 +1,1098 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>魔界のお菓子探し - Rogue System -</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --game-speed: 1; }
+    
+    body { background-color: #000000; color: #d1d5db; font-family: 'Georgia', 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif JP', serif; }
+    .font-mono { font-family: ui-monospace, Consolas, monospace; }
+    
+    @keyframes bobble { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+    .anim-bobble { animation: bobble calc(2s / var(--game-speed)) infinite ease-in-out; }
+    
+    @keyframes damage {
+      0%, 100% { transform: translateX(0); filter: brightness(1); }
+      25% { transform: translateX(-10px); filter: brightness(2) grayscale(100%); }
+      75% { transform: translateX(10px); filter: brightness(2) grayscale(100%); }
+    }
+    .anim-damage { animation: damage calc(0.3s / var(--game-speed)) ease-in-out; }
+
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: #000; }
+    ::-webkit-scrollbar-thumb { background: #374151; }
+    
+    button { transition: background-color 0.2s, border-color 0.2s; border-radius: 0 !important; }
+    .card-hover:hover { box-shadow: 0 0 10px rgba(255, 255, 255, 0.2); border-color: #9ca3af; }
+    
+    .vn-char { transition: transform 0.3s, opacity 0.3s; transform: translateY(20px); opacity: 0; display: none; }
+    .vn-char.active { transform: translateY(0); opacity: 1; display: flex; filter: drop-shadow(0 0 20px rgba(0, 0, 0, 0.9)); }
+  </style>
+</head>
+<body>
+  <div id="vn-mode" class="flex flex-col h-full bg-black relative">
+    <div class="flex-grow flex items-end justify-center p-4 relative overflow-hidden bg-gradient-to-t from-black via-gray-900 to-black border-b border-gray-800">
+      <div id="charLily" class="vn-char w-56 h-72 flex-col items-center justify-end mb-4 overflow-hidden drop-shadow-2xl">
+        <img 
+          src="assets/characters/lily.png" 
+          onerror="this.onerror=null; this.src='image_6abf8f.png';" 
+          alt="リリー" 
+          class="w-full h-full object-contain"
+        >
+      </div>
+    </div>
+    <div class="h-[40%] md:h-1/3 bg-black border-t border-gray-800 p-4 md:p-6 flex flex-col">
+      <div id="vn-speaker" class="font-bold text-gray-400 text-sm md:text-base mb-2 tracking-widest uppercase"></div>
+      <div id="vn-box" class="text-base md:text-lg mb-4 flex-grow text-gray-200 leading-relaxed font-serif"></div>
+      <div id="vn-choices" class="flex flex-wrap gap-2 justify-end"></div>
+    </div>
+  </div>
+
+  <div id="rpg-mode" class="hidden h-full flex-col max-w-4xl mx-auto w-full relative border-x border-gray-900 bg-black">
+    <div onclick="openStatusModal()" class="bg-[#050505] border-b border-gray-800 p-2 flex flex-wrap justify-between items-center text-xs shrink-0 font-mono text-gray-400 cursor-pointer hover:bg-gray-900 transition-colors group relative">
+      <div class="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity"></div>
+      <div class="font-bold text-gray-200 flex items-center gap-2 tracking-widest uppercase">
+        <span class="text-base grayscale">🦇</span> <span id="stName">GUEST</span>
+      </div>
+      <div class="flex gap-4">
+        <div>HP <span id="stHp" class="text-gray-100 font-bold">100</span>/<span id="stMaxHp">100</span></div>
+        <div>装甲 <span id="stShield" class="text-cyan-400 font-bold">0</span></div>
+      </div>
+      <div class="flex gap-4 mt-2 w-full md:w-auto md:mt-0 justify-between items-center">
+        <div>攻撃 <span id="stAtk" class="text-gray-200">10</span></div>
+        <div>防御 <span id="stDef" class="text-gray-200">5</span></div>
+        <div class="text-yellow-600 border border-yellow-900/50 px-2 py-0.5 rounded-sm">遺物 [<span id="stArts">0</span>]</div>
+      </div>
+    </div>
+
+    <div class="flex-1 min-h-0 flex flex-col relative overflow-hidden bg-black">
+      <div class="bg-[#050505] py-1 font-bold tracking-widest border-b border-gray-800 text-[10px] flex justify-between px-4 items-center h-6 shrink-0 text-gray-600 uppercase font-mono">
+        <span id="floorText">階層 1</span>
+        <span id="locationName">拠点</span>
+        <span>深淵</span>
+      </div>
+      
+      <div id="visualView" class="h-[45%] md:h-[55%] shrink-0 w-full border-b border-gray-800 relative overflow-hidden flex items-center justify-center transition-colors duration-500 bg-[#0a0a0a]">
+        <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(0,0,0,0)_0%,_rgba(0,0,0,0.8)_100%)] z-0"></div>
+        <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-0"></div>
+        <div id="enemySprite" class="text-[6rem] md:text-[8rem] z-10 anim-bobble filter drop-shadow-2xl select-none grayscale-[0.2]">🏕️</div>
+        
+        <div class="absolute bottom-4 w-3/4 max-w-md flex flex-col items-center z-10 hidden" id="enemyInfo">
+          <div id="enemyName" class="font-bold text-gray-300 text-xs tracking-[0.2em] font-serif uppercase mb-1 drop-shadow-md"></div>
+          <div class="w-full bg-gray-900 h-1 border border-gray-700 overflow-hidden relative">
+             <div id="enemyHpBar" class="bg-red-800 h-full w-full transition-all duration-300"></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="logArea" class="flex-1 min-h-0 p-3 overflow-y-auto text-[11px] md:text-sm leading-relaxed bg-black text-gray-400 font-mono"></div>
+    </div>
+
+    <div class="bg-[#050505] border-t border-gray-800 p-2 md:p-3 h-[250px] md:h-[280px] shrink-0 font-mono relative">
+      <div id="baseMenu" class="grid grid-cols-2 gap-2 h-full hidden">
+        <button onclick="switchMenu('dungeonSelect')" class="bg-[#0a0a0a] border border-gray-700 hover:bg-[#111] text-gray-300 text-sm tracking-widest uppercase">探索へ出発</button>
+        <button onclick="talkToTana()" class="bg-[#0a0a0a] border border-gray-700 hover:bg-[#111] text-gray-300 text-sm tracking-widest uppercase">リリーと話す</button>
+        <button onclick="restAtBase()" class="bg-[#050505] border border-gray-800 hover:bg-[#111] text-gray-500 text-xs tracking-widest uppercase">休息 (回復)</button>
+        <button onclick="openStatusModal()" class="bg-[#050505] border border-gray-800 hover:bg-[#111] text-yellow-700 text-xs tracking-widest uppercase">所持遺물의確認</button>
+      </div>
+
+      <div id="dungeonSelect" class="hidden flex-col h-full">
+        <div class="text-[10px] text-gray-500 mb-2 tracking-widest uppercase shrink-0">目的地を選択せよ</div>
+        <div id="dungeonList" class="flex-grow grid grid-cols-1 gap-2 overflow-y-auto pr-2"></div>
+        <button onclick="switchMenu('baseMenu')" class="mt-2 bg-black border border-gray-800 hover:bg-[#111] p-2 text-gray-500 text-[10px] uppercase w-full shrink-0">戻る</button>
+      </div>
+
+      <div id="exploreMenu" class="hidden flex-col items-center justify-center h-full relative">
+        <div class="text-[10px] text-gray-500 uppercase tracking-widest text-center w-full mb-2 shrink-0">次へ進む部屋を選択せよ</div>
+        <div id="mapTreeContainer" class="flex-grow w-full flex flex-col justify-center relative"></div>
+      </div>
+
+      <div id="battleMenu" class="hidden h-full flex flex-col justify-center">
+        <div class="grid grid-cols-2 gap-2 h-full">
+          <button onclick="executeAction('attack')" class="bg-[#1a0505] border border-[#4a1515] hover:bg-[#2a0808] text-red-200 text-sm tracking-widest uppercase">攻撃</button>
+          <button onclick="executeAction('defend')" class="bg-[#051a15] border border-[#154a3a] hover:bg-[#082a22] text-cyan-200 text-sm tracking-widest uppercase">防御 (装甲展開)</button>
+          <button onclick="executeAction('heal')" class="bg-[#050a1a] border border-[#15204a] hover:bg-[#08102a] text-blue-200 text-sm tracking-widest uppercase">回復魔法</button>
+          <button onclick="executeAction('flee')" class="bg-[#111] border border-gray-800 hover:bg-[#222] text-gray-400 text-sm tracking-widest uppercase">撤退 (帰還)</button>
+        </div>
+      </div>
+
+      <div id="eventMenu" class="hidden h-full flex flex-col items-center justify-center gap-2 overflow-y-auto px-4">
+        <div class="text-[10px] text-purple-400 uppercase tracking-widest mb-1">選択せよ</div>
+        <div id="eventOptions" class="w-full max-w-sm flex flex-col gap-2"></div>
+      </div>
+
+      <div id="rewardMenu" class="hidden h-full flex flex-col items-center justify-start overflow-y-auto pt-1">
+        <div class="text-[10px] text-yellow-600 uppercase tracking-widest mb-2 shrink-0">遺物を一つ選べ</div>
+        <div id="rewardOptions" class="w-full max-w-lg flex flex-col gap-2"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="statusModal" class="hidden fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4 font-mono">
+    <div class="bg-[#050505] border border-gray-700 w-full max-w-md max-h-[80vh] flex flex-col shadow-2xl relative">
+      <button onclick="closeStatusModal()" class="absolute top-2 right-2 text-gray-500 hover:text-white text-xl leading-none">&times;</button>
+      
+      <div class="p-4 border-b border-gray-800 shrink-0">
+        <h2 class="text-gray-200 font-bold tracking-widest text-lg mb-2">PLAYER STATUS</h2>
+        <div class="grid grid-cols-2 gap-2 text-sm text-gray-400">
+          <div>最大HP: <span id="modalMaxHp" class="text-gray-200"></span></div>
+          <div>素早さ: <span id="modalSpd" class="text-gray-200"></span></div>
+          <div>攻撃力: <span id="modalAtk" class="text-gray-200"></span></div>
+          <div>防御力: <span id="modalDef" class="text-gray-200"></span></div>
+        </div>
+      </div>
+      
+      <div class="p-4 overflow-y-auto flex-grow">
+        <h3 class="text-yellow-600 font-bold tracking-widest text-sm mb-3">所持遺物 (ARTIFACTS)</h3>
+        <div id="modalArtifactList" class="flex flex-col gap-3"></div>
+      </div>
+      
+      <div class="p-2 border-t border-gray-800 shrink-0">
+        <button onclick="closeStatusModal()" class="w-full bg-[#111] hover:bg-gray-800 border border-gray-700 text-gray-300 py-2 uppercase text-xs tracking-widest">閉じる</button>
+      </div>
+    </div>
+  </div>
+
+<script>
+class EventManager {
+  constructor() {
+    this.listeners = {};
+    this.depth = 0;
+    this.MAX_DEPTH = 15;
+  }
+  on(eventName, config) {
+    if (!this.listeners[eventName]) this.listeners[eventName] = [];
+    this.listeners[eventName] = this.listeners[eventName].filter(l => l.id !== config.id);
+    this.listeners[eventName].push({ ...config, currentTriggers: 0 });
+    this.listeners[eventName].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  }
+  emit(eventName, ctx) {
+    if (this.depth > this.MAX_DEPTH) { console.warn(`Max depth at [${eventName}]`); return ctx; }
+    this.depth++;
+    const list = this.listeners[eventName] || [];
+    for (let l of list) {
+      if (l.maxTrigger > 0 && l.currentTriggers >= l.maxTrigger) continue;
+      try { ctx = l.cb(ctx, this); } catch(e) { console.error(e); }
+      l.currentTriggers++;
+    }
+    this.depth--;
+    return ctx;
+  }
+  resetTurn() {
+    for (let ev in this.listeners) this.listeners[ev].forEach(l => l.currentTriggers = 0);
+  }
+  removeAllByOwner(ownerId) {
+    for (let ev in this.listeners) this.listeners[ev] = this.listeners[ev].filter(l => !l.id.includes(ownerId));
+  }
+}
+
+const em = new EventManager();
+
+let GameState = { playerName: "", currentDialogStep: 0, clearedStages: 0, targetDungeonId: null };
+
+let player = {
+  uid: 'player', name: 'GUEST',
+  hp: 100, maxHp: 100, shield: 0,
+  baseStats: { atk: 12, def: 5, spd: 10 },
+  passives: []
+};
+
+let currentEnemy = null;
+let isEnemyTurn = false;
+let floorCount = 1;
+const MAX_FLOOR = 10;
+let currentMapNode = null;
+let currentDungeon = null;
+
+const dungeons = [
+  { id: 0, name: "プルプルゼリーの森", introStep: 200, bgColor: "bg-[#001a00]",
+    boss: { name: "キングプリンスライム", hp: 120, atk: 15, def: 5, sprite: "👑🍮", bg: "bg-[#002a00]" },
+    enemies: [{name:"ゼリースライム", hp:30, atk:5, def:2, sprite: "🍮", bg: "bg-[#001a00]"}],
+    rareEnemies: [{name:"はぐれプリン", hp:40, atk:10, def:3, sprite: "✨🍮", bg: "bg-[#1a1a00]"}]
+  },
+  { id: 1, name: "灼熱の小麦畑", introStep: 300, bgColor: "bg-[#1a0a00]",
+    boss: { name: "フレイムパンプキン", hp: 250, atk: 25, def: 8, sprite: "🎃🔥", bg: "bg-[#331a00]" },
+    enemies: [{name:"焦げたパン", hp:60, atk:15, def:5, sprite: "🍞", bg: "bg-[#1a0a00]"}],
+    rareEnemies: [{name:"黄金のトースト", hp:70, atk:15, def:6, sprite: "✨🍞", bg: "bg-[#2a2a00]"}]
+  },
+  { id: 2, name: "狂乱の牛牧場", introStep: 400, bgColor: "bg-[#1a1500]",
+    boss: { name: "マッド・カウ", hp: 450, atk: 40, def: 10, sprite: "🐂💢", bg: "bg-[#332a00]" },
+    enemies: [{name:"暴れ牛", hp:120, atk:25, def:8, sprite: "🐄", bg: "bg-[#1a1500]"}],
+    rareEnemies: [{name:"セレブ・カウ", hp:150, atk:30, def:10, sprite: "✨🐄", bg: "bg-[#2a2500]"}]
+  },
+  { id: 3, name: "魅惑のシュガーケイブ", introStep: 500, bgColor: "bg-[#00151a]",
+    boss: { name: "クリスタルゴーレム", hp: 700, atk: 55, def: 15, sprite: "💎🤖", bg: "bg-[#002a33]" },
+    enemies: [{name:"角砂糖ムシ", hp:180, atk:35, def:10, sprite: "🧊", bg: "bg-[#00151a]"}],
+    rareEnemies: [{name:"レインボーシュガー", hp:200, atk:45, def:12, sprite: "✨🧊", bg: "bg-[#002a2a]"}]
+  },
+  { id: 4, name: "チョコレート火山", introStep: 600, bgColor: "bg-[#1a0000]",
+    boss: { name: "カカオドラゴン", hp: 1200, atk: 80, def: 20, sprite: "🐉🍫", bg: "bg-[#330000]" },
+    enemies: [{name:"チョコゴーレム", hp:300, atk:50, def:15, sprite: "🍫", bg: "bg-[#1a0000]"}],
+    rareEnemies: [{name:"ホワイトドラゴン", hp:500, atk:60, def:18, sprite: "✨🐉", bg: "bg-[#2a1a1a]"}]
+  },
+  { id: 5, name: "魔王のキッチン(跡地)", introStep: 700, bgColor: "bg-[#15001a]",
+    boss: { name: "魔王の残影", hp: 2500, atk: 120, def: 30, sprite: "👁️‍🗨️👑", bg: "bg-[#2a0033]" },
+    enemies: [{name:"暗黒騎士", hp:400, atk:70, def:20, sprite: "🤺", bg: "bg-[#15001a]"}],
+    rareEnemies: [{name:"伝説のパティシエ", hp:800, atk:90, def:25, sprite: "✨👨‍🍳", bg: "bg-[#2a1a2a]"}]
+  }
+];
+
+const ROOM_TYPES = {
+  'monster': { id: 'monster', name: 'モンスター', icon: '👿', desc: '魔物の気配がする…' },
+  'elite': { id: 'elite', name: '強敵', icon: '✨', desc: '強大な気配だ…' },
+  'event': { id: 'event', name: 'イベント', icon: '❓', desc: '何かがある…' },
+  'trap': { id: 'trap', name: '罠', icon: '☠️', desc: 'あやしい…' },
+  'rest': { id: 'rest', name: '休憩', icon: '💧', desc: '休めそうだ…' },
+  'empty': { id: 'empty', name: '空部屋', icon: '🚪', desc: '何もない…' },
+  'boss': { id: 'boss', name: 'ボス', icon: '💀', desc: '最奥の気配…' }
+};
+
+const ScenarioData = {
+  0: { speaker: "システム", text: "深淵への旅を始める覚悟はありますか？", choices: [{ text: "はい", nextStep: 10 }] },
+  10: { speaker: "リリー", characters: ['charLily'], text: "よく来たわね。……お前の名前は何だったかしら？", hasFreeTalk: true, freeTalkPlaceholder: "名前を入力せよ...", freeTalkButtonText: "決定", onFreeTalkSubmit: (val) => { GameState.playerName = val || "GUEST"; player.name = GameState.playerName; return 20; } },
+  20: { speaker: "リリー", characters: ['charLily'], text: (g) => `そう、${g.playerName}ね。単刀直入に言うわ。私、どうしても……【プリン】と【ドーナツ】が食べたいの。`, choices: [{ text: "えっ！？", nextStep: 21 }] },
+  21: { speaker: "リリー", characters: ['charLily'], text: "甘いものは別腹よ！材料を集めてきなさい！パシリ任命よ！", choices: [{ text: "わかりました…", action: 'startRPG' }] },
+  
+  200: { speaker: "リリー", characters: ['charLily'], text: "『プルプルゼリーの森』へ行って、極上のスライムゼリーを狩ってきなさい！", choices: [{ text: "行ってきます！", action: 'enterDungeon' }] },
+  300: { speaker: "リリー", characters: ['charLily'], text: "次は小麦よ！『灼熱の小麦畑』でこんがり焼けた小麦を奪うのよ！", choices: [{ text: "行く！", action: 'enterDungeon' }] },
+  400: { speaker: "リリー", characters: ['charLily'], text: "『狂乱の牛牧場』で暴れ牛からミルクを絞り取ってきなさい！", choices: [{ text: "はい！", action: 'enterDungeon' }] },
+  500: { speaker: "リリー", characters: ['charLily'], text: "『魅惑のシュガーケイブ』で極上の砂糖鉱石を手に入れるのよ！", choices: [{ text: "行きます！", action: 'enterDungeon' }] },
+  600: { speaker: "リリー", characters: ['charLily'], text: "『チョコレート火山』のドラゴンを倒して、マグマチョコを持ってきなさい！", choices: [{ text: "やるしかない", action: 'enterDungeon' }] },
+  700: { speaker: "リリー", characters: ['charLily'], text: "最後は魔王城の跡地に眠る『伝説のオーブン』！魔王の残影が出ようと、打ち倒しなさい！", choices: [{ text: "究極のお菓子のために！", action: 'enterDungeon' }] },
+  800: { speaker: "リリー", characters: ['charLily'], text: "さあ、早速お菓子作りよ！……完成！もぐもぐ。うーん、最高！お前も食べる？", choices: [{ text: "いただきます！", nextStep: 801 }] },
+  801: { speaker: "リリー", characters: ['charLily'], text: "これでお前も立派なパシリね！これからもよろしく頼むわよ！\n\n【 旅は終わった 】", choices: [{ text: "拠点へ帰還する", action: 'startRPG' }] },
+  
+  1000: { speaker: "リリー", characters: ['charLily'], text: "どうしたの？早く材料を集めてきなさい。", choices: [{ text: "戻る", action: 'startRPG' }] },
+  1001: { speaker: "リリー", characters: ['charLily'], text: "魔王様？さぁ、どこかでサボってるんじゃないかしら。", choices: [{ text: "戻る", action: 'startRPG' }] },
+};
+
+function startVN(stepId) {
+  document.getElementById('rpg-mode').classList.add('hidden'); 
+  document.getElementById('vn-mode').classList.remove('hidden'); 
+  document.getElementById('vn-mode').classList.add('flex');
+  GameState.currentDialogStep = stepId; 
+  runDialogStep();
+}
+
+function runDialogStep() {
+  const step = ScenarioData[GameState.currentDialogStep]; if (!step) return;
+  document.querySelectorAll('.vn-char').forEach(el => el.classList.remove('active'));
+  if (step.characters) step.characters.forEach(id => { const el = document.getElementById(id); if(el) el.classList.add('active'); });
+  
+  document.getElementById('vn-speaker').textContent = step.speaker || ""; 
+  document.getElementById('vn-box').textContent = typeof step.text === 'function' ? step.text(GameState) : step.text;
+  const choicesDiv = document.getElementById('vn-choices');
+  choicesDiv.innerHTML = "";
+  
+  if (step.hasFreeTalk) {
+    const d = document.createElement('div'); d.className = "flex gap-2 w-full mt-4 font-mono";
+    const i = document.createElement('input'); i.placeholder = step.freeTalkPlaceholder; i.className = "flex-grow p-2 bg-black border border-gray-700 text-gray-300 outline-none focus:border-gray-400";
+    const b = document.createElement('button'); b.textContent = step.freeTalkButtonText; b.className = "bg-black border border-gray-700 hover:bg-gray-900 text-gray-300 py-2 px-6 uppercase";
+    const submit = () => { const nx = step.onFreeTalkSubmit(i.value.trim()); if(nx !== undefined){ GameState.currentDialogStep = nx; runDialogStep(); } };
+    b.onclick = submit; i.addEventListener('keypress', (e) => { if (e.key === 'Enter') submit(); });
+    d.append(i, b); choicesDiv.appendChild(d); setTimeout(() => i.focus(), 10);
+  } else if (step.choices) {
+    step.choices.forEach(c => {
+      const b = document.createElement('button'); b.textContent = c.text; b.className = "bg-black border border-gray-700 hover:bg-gray-800 text-gray-300 py-2 px-6 shadow-none mt-2 font-mono text-sm rounded-sm";
+      b.onclick = () => { 
+        let next = c.nextStep;
+        if (c.onChoose) { const overrideNext = c.onChoose(); if(overrideNext !== undefined) next = overrideNext; }
+        if (c.action) handleVNAction(c.action); 
+        else if (next !== undefined) { GameState.currentDialogStep = next; runDialogStep(); }
+      };
+      choicesDiv.appendChild(b);
+    });
+  }
+}
+
+function handleVNAction(action) {
+  document.getElementById('vn-mode').classList.add('hidden'); 
+  document.getElementById('vn-mode').classList.remove('flex');
+  document.getElementById('rpg-mode').classList.remove('hidden'); 
+  document.getElementById('rpg-mode').classList.add('flex');
+  
+  if (action === 'startRPG') { 
+    calcStats(); updateStatusUI(); returnToBase(); 
+  } else if (action === 'enterDungeon') { 
+    startDungeonExplore(); 
+  }
+}
+
+window.talkToTana = function() { startVN([1000, 1001][Math.floor(Math.random() * 2)]); }
+
+const ArtifactDB = {
+  'vampire': { 
+    id: 'vampire', name: "吸血鬼の牙", icon: "🧛", desc: "反射以外のダメージを与えた時、その50%回復する",
+    onEquip: (em, owner) => {
+      em.on('AfterTakeDamage', {
+        id: `vampire_${owner.uid}`, priority: 50, maxTrigger: 5,
+        cb: (ctx) => {
+          if(ctx.source && ctx.source.uid === owner.uid && ctx.actualDamage > 0 && !(ctx.tags || []).includes('reflect')) {
+            battle.doHeal(owner, owner, Math.floor(ctx.actualDamage * 0.5));
+          }
+          return ctx;
+        }
+      });
+    }
+  },
+  'overheal': {
+    id: 'overheal', name: "過剰癒し", icon: "💖", desc: "最大HPを超えた回復量が装甲(シールド)に変換される",
+    onEquip: (em, owner) => {
+      em.on('OnHeal', {
+        id: `overheal_${owner.uid}`, priority: 50, maxTrigger: 5,
+        cb: (ctx) => {
+          if(ctx.target.uid === owner.uid) {
+            const over = (ctx.target.hp + ctx.healAmount) - ctx.target.maxHp;
+            if(over > 0) {
+              battle.addShield(owner, over);
+              ctx.healAmount -= over;
+            }
+          }
+          return ctx;
+        }
+      });
+    }
+  },
+  'reactive_shield': {
+    id: 'reactive_shield', name: "反発障壁", icon: "🛡️", desc: "被弾時に装甲+10。装甲獲得時に敵へ10の反射ダメージ",
+    onEquip: (em, owner) => {
+      em.on('AfterTakeDamage', {
+        id: `rs_1_${owner.uid}`, priority: 50, maxTrigger: 3,
+        cb: (ctx) => {
+          if(ctx.target.uid === owner.uid && ctx.actualDamage > 0) {
+            logMsg(`> [シナジー] 反発障壁が展開！`, 'text-cyan-300');
+            battle.addShield(owner, 10);
+          }
+          return ctx;
+        }
+      });
+      em.on('OnShieldGain', {
+        id: `rs_2_${owner.uid}`, priority: 50, maxTrigger: 3,
+        cb: (ctx) => {
+          if(ctx.target.uid === owner.uid) {
+            const enemy = currentEnemy;
+            if(enemy && enemy.hp > 0) {
+              logMsg(`> [シナジー] 障壁が爆発した！`, 'text-yellow-400');
+              battle.dealDamage(owner, enemy, 10, ['magic', 'reflect']);
+            }
+          }
+          return ctx;
+        }
+      });
+    }
+  },
+  'glass_cannon': {
+    id: 'glass_cannon', name: "ガラスの砲台", icon: "🗡️", desc: "防御力が0になる代わりに、与える全ダメージが3倍になる",
+    onEquip: (em, owner) => {
+      em.on('BeforeTakeDamage', {
+         id: `gc_1_${owner.uid}`, priority: 999, maxTrigger: 0,
+         cb: (ctx) => {
+            if(ctx.target.uid === owner.uid) ctx.defenseOverride = 0;
+            return ctx;
+         }
+      });
+      em.on('BeforeAttack', {
+         id: `gc_2_${owner.uid}`, priority: 90, maxTrigger: 0,
+         cb: (ctx) => {
+            if(ctx.source.uid === owner.uid) ctx.damage *= 3;
+            return ctx;
+         }
+      });
+    }
+  },
+  'spiky_armor': {
+    id: 'spiky_armor', name: "茨の鎧", icon: "🦔", desc: "受けたダメージの30%を敵に反射する",
+    onEquip: (em, owner) => {
+      em.on('AfterTakeDamage', {
+         id: `spiky_${owner.uid}`, priority: 40, maxTrigger: 5,
+         cb: (ctx) => {
+            if(ctx.target.uid === owner.uid && !(ctx.tags || []).includes('reflect') && ctx.actualDamage > 0 && ctx.source) {
+               const dmg = Math.max(1, Math.floor(ctx.actualDamage * 0.3));
+               battle.dealDamage(owner, ctx.source, dmg, ['reflect']);
+            }
+            return ctx;
+         }
+      });
+    }
+  },
+  'speed_guard': {
+     id: 'speed_guard', name: "神速の護り", icon: "💨", desc: "防御力の代わりに素早さ(SPD)でダメージを軽減する",
+     onEquip: (em, owner) => {
+       em.on('BeforeTakeDamage', {
+         id: `sg_${owner.uid}`, priority: 100, maxTrigger: 0,
+         cb: (ctx) => {
+            if(ctx.target.uid === owner.uid && ctx.defenseOverride === null) {
+              ctx.useStatForDefense = 'spd';
+            }
+            return ctx;
+         }
+       })
+     }
+  }
+};
+
+function rebuildPassives() {
+  em.removeAllByOwner('player');
+  player.passives.forEach(p => {
+    if(p && typeof p.onEquip === 'function') p.onEquip(em, player);
+  });
+  const artEl = document.getElementById('stArts');
+  if(artEl) artEl.textContent = player.passives.length;
+}
+
+const battle = {
+  dealDamage(source, target, amount, tags = []) {
+    if (!target || target.hp <= 0) return;
+    
+    let ctx = { source, target, damage: amount, tags, cancel: false, defenseOverride: null, useStatForDefense: 'def', actualDamage: 0 };
+    ctx = em.emit('BeforeTakeDamage', ctx);
+    if (ctx.cancel) return;
+    
+    let statKey = ctx.useStatForDefense || 'def';
+    let defense = ctx.defenseOverride !== null ? ctx.defenseOverride : ((target.baseStats && target.baseStats[statKey]) || 0);
+    let dmg = Math.max(1, Math.floor(ctx.damage - (defense / 2)));
+    
+    if (target.shield > 0) {
+       if (target.shield >= dmg) {
+          target.shield -= dmg;
+          logMsg(`> 装甲が ${dmg} のダメージを吸収した。`, "text-cyan-500");
+          dmg = 0;
+       } else {
+          dmg -= target.shield;
+          target.shield = 0;
+          logMsg(`> 装甲が破壊された。`, "text-cyan-600");
+       }
+    }
+    
+    ctx.actualDamage = dmg;
+    
+    if (dmg > 0) {
+      target.hp -= dmg;
+      logMsg(`> ${target.name} は ${dmg} のダメージを受けた。`, target.uid==='player' ? "text-red-500" : "text-gray-300");
+      if(target.uid !== 'player') triggerDamageAnim();
+    }
+    
+    em.emit('AfterTakeDamage', ctx);
+    updateStatusUI();
+    
+    if (target.hp <= 0) {
+       em.emit('OnDeath', { target, source });
+    }
+  },
+  
+  doHeal(source, target, amount) {
+    if(!target || target.hp <= 0) return;
+    let ctx = { source, target, healAmount: amount, cancel: false };
+    ctx = em.emit('OnHeal', ctx);
+    
+    if (ctx.cancel || ctx.healAmount <= 0) return;
+    target.hp = Math.min(target.maxHp, target.hp + ctx.healAmount);
+    logMsg(`> ${target.name} は ${ctx.healAmount} HP回復した。`, 'text-green-500');
+    updateStatusUI();
+  },
+  
+  addShield(target, amount) {
+    if(!target || target.hp <= 0) return;
+    let ctx = { target, amount };
+    ctx = em.emit('OnShieldGain', ctx);
+    target.shield += ctx.amount;
+    logMsg(`> ${target.name} は 装甲 ${ctx.amount} を得た。`, 'text-cyan-400');
+    updateStatusUI();
+  }
+};
+
+em.on('OnDeath', {
+  id: 'sys_death', priority: 999, maxTrigger: 0,
+  cb: (ctx) => {
+    if (ctx.target.uid === 'player') {
+      logMsg("> 死亡した。", "text-red-700 font-bold tracking-widest text-lg");
+      setTimeout(() => location.reload(), 3000);
+    } else {
+      logMsg(`> ${ctx.target.name} を打ち倒した。`, "text-yellow-600 font-bold tracking-widest");
+      onBattleWin();
+    }
+    return ctx;
+  }
+});
+
+function generateDungeonMap() {
+  let floorNodes = [];
+  let idCount = 0;
+  
+  for(let i=0; i<=MAX_FLOOR; i++) {
+    floorNodes[i] = [];
+    let roomCount = (i === 0 || i === MAX_FLOOR) ? 1 : Math.floor(Math.random() * 2) + 2; 
+    for(let j=0; j<roomCount; j++) {
+       let typeKey = 'empty';
+       if (i === MAX_FLOOR) typeKey = 'boss';
+       else if (i === 0) typeKey = 'start';
+       else {
+           const r = Math.random();
+           if (r < 0.45) typeKey = 'monster';
+           else if (r < 0.55 && currentDungeon.rareEnemies) typeKey = 'elite';
+           else if (r < 0.75) typeKey = 'event';
+           else if (r < 0.85) typeKey = 'trap';
+           else typeKey = 'rest';
+       }
+       let node = { id: idCount++, floor: i, type: typeKey, roomData: ROOM_TYPES[typeKey] || ROOM_TYPES['empty'], next: [] };
+       floorNodes[i].push(node);
+    }
+  }
+  
+  for(let i=0; i<MAX_FLOOR; i++) {
+    let currentLayer = floorNodes[i];
+    let nextLayer = floorNodes[i+1];
+    currentLayer.forEach((node, idx) => {
+       let targetIdx = Math.min(idx, nextLayer.length - 1);
+       node.next.push(nextLayer[targetIdx]);
+       if (Math.random() < 0.6 && nextLayer.length > 1) {
+          let secondTarget = (targetIdx + 1) % nextLayer.length;
+          if (!node.next.includes(nextLayer[secondTarget])) node.next.push(nextLayer[secondTarget]);
+       }
+    });
+  }
+  return floorNodes[0][0]; 
+}
+
+function switchMenu(menuId) {
+  ['baseMenu', 'dungeonSelect', 'exploreMenu', 'battleMenu', 'eventMenu', 'rewardMenu'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.classList.add('hidden');
+  });
+  const target = document.getElementById(menuId);
+  if(target) target.classList.remove('hidden');
+  
+  if (menuId === 'dungeonSelect') {
+    renderDungeonList();
+  }
+}
+
+function logMsg(msg, colorClass = "text-gray-400") {
+  const area = document.getElementById('logArea');
+  if(!area) return;
+  const div = document.createElement('div'); 
+  div.className = `mb-1 pb-1 border-b border-gray-900 border-dashed ${colorClass}`; 
+  div.innerHTML = msg;
+  area.appendChild(div);
+  
+  requestAnimationFrame(() => {
+    area.scrollTop = area.scrollHeight;
+  });
+}
+
+function calcStats() {
+  player.hp = Math.min(player.hp, player.maxHp);
+  updateStatusUI();
+}
+
+function updateStatusUI() {
+  const nameEl = document.getElementById('stName'); if(nameEl) nameEl.textContent = player.name;
+  const hpEl = document.getElementById('stHp'); if(hpEl) hpEl.textContent = player.hp;
+  const maxHpEl = document.getElementById('stMaxHp'); if(maxHpEl) maxHpEl.textContent = player.maxHp;
+  const shieldEl = document.getElementById('stShield'); if(shieldEl) shieldEl.textContent = player.shield;
+  const atkEl = document.getElementById('stAtk'); if(atkEl) atkEl.textContent = player.baseStats.atk;
+  const defEl = document.getElementById('stDef'); if(defEl) defEl.textContent = player.baseStats.def;
+  const floorEl = document.getElementById('floorText'); if(floorEl) floorEl.textContent = `階層 ${floorCount}/${MAX_FLOOR}`;
+}
+
+function triggerDamageAnim() {
+  const sprite = document.getElementById('enemySprite'); 
+  if(!sprite) return;
+  sprite.classList.remove('anim-bobble', 'anim-damage'); 
+  void sprite.offsetWidth;
+  sprite.classList.add('anim-damage');
+  setTimeout(() => { sprite.classList.remove('anim-damage'); sprite.classList.add('anim-bobble'); }, 300);
+  
+  if(currentEnemy) {
+    const hpBar = document.getElementById('enemyHpBar');
+    if(hpBar) hpBar.style.width = `${Math.max(0, (currentEnemy.hp / currentEnemy.maxHp) * 100)}%`;
+  }
+}
+
+window.returnToBase = function() {
+  currentDungeon = null; 
+  currentMapNode = null;
+  const enemyInfo = document.getElementById('enemyInfo');
+  if(enemyInfo) enemyInfo.classList.add('hidden');
+  
+  document.getElementById('locationName').textContent = "拠点"; 
+  document.getElementById('logArea').innerHTML = "";
+  logMsg("> 拠点に帰還した。", "text-gray-500");
+  
+  if(player.hp <= 0) { 
+    player.hp = Math.floor(player.maxHp / 2); 
+    logMsg("> HPが半分回復した。", "text-gray-500"); 
+  }
+  
+  updateStatusUI();
+  switchMenu('baseMenu');
+}
+
+window.restAtBase = function() { 
+  player.hp = player.maxHp; 
+  player.shield = 0;
+  updateStatusUI(); 
+  logMsg("> 休息した。HPが全回復した。", "text-gray-400"); 
+}
+
+function renderDungeonList() {
+  const list = document.getElementById('dungeonList');
+  if(!list) return;
+  list.innerHTML = "";
+  dungeons.forEach(d => {
+    if (d.id <= GameState.clearedStages) {
+      const btn = document.createElement('button'); 
+      btn.className = "bg-[#050505] border border-gray-800 hover:bg-[#111] p-3 text-left flex justify-between items-center w-full";
+      btn.innerHTML = `<span class="text-gray-300 text-sm tracking-widest">${d.name}</span> <span class="text-[10px] text-gray-600">階層 ${d.id*3 + 1}~</span>`;
+      btn.onclick = () => { 
+        GameState.targetDungeonId = d.id; 
+        if (GameState.clearedStages > d.id) {
+           startDungeonExplore(); 
+        } else {
+           startVN(d.introStep);
+        }
+      }; 
+      list.appendChild(btn);
+    } else {
+      const div = document.createElement('div'); 
+      div.className = "bg-black border border-gray-900 p-3 text-left flex justify-between items-center";
+      div.innerHTML = `<span class="text-gray-700 text-sm tracking-widest">???</span> <span class="text-[10px] text-gray-800">封印</span>`; 
+      list.appendChild(div);
+    }
+  });
+}
+
+window.switchMenu = switchMenu; 
+
+function startDungeonExplore() {
+  player.maxHp = 100;
+  player.hp = 100;
+  player.shield = 0;
+  player.baseStats = { atk: 12, def: 5, spd: 10 };
+  player.passives = [];
+  rebuildPassives();
+
+  currentDungeon = dungeons[GameState.targetDungeonId]; 
+  document.getElementById('locationName').textContent = currentDungeon.name; 
+  document.getElementById('logArea').innerHTML = "";
+  logMsg(`> ${currentDungeon.name} への探索を開始した...`, "text-gray-500");
+  
+  currentMapNode = generateDungeonMap();
+  floorCount = 1;
+  updateStatusUI();
+  
+  showExploreMenu(); 
+}
+
+function showExploreMenu() {
+  switchMenu('exploreMenu');
+  const enemyInfo = document.getElementById('enemyInfo');
+  if(enemyInfo) enemyInfo.classList.add('hidden');
+  
+  const visualView = document.getElementById('visualView');
+  if(visualView) visualView.className = "h-[45%] md:h-[55%] shrink-0 w-full border-b border-gray-800 relative overflow-hidden flex items-center justify-center transition-colors duration-500 bg-[#0a0a0a]";
+  
+  const sprite = document.getElementById('enemySprite');
+  if(sprite) sprite.textContent = "🏕️";
+  
+  renderNextRooms();
+}
+
+function renderNextRooms() {
+  const container = document.getElementById('mapTreeContainer');
+  if(!container) return;
+  container.innerHTML = '';
+  
+  if (!currentMapNode || currentMapNode.next.length === 0) return; 
+
+  const nextNextNodes = new Set();
+  currentMapNode.next.forEach(n => {
+    n.next.forEach(nn => nextNextNodes.add(nn));
+  });
+  const nextNextArr = Array.from(nextNextNodes);
+
+  if (nextNextArr.length > 0) {
+    const topRow = document.createElement('div');
+    topRow.className = "flex justify-center gap-4 w-full mb-8 relative z-10 opacity-50 pointer-events-none";
+    nextNextArr.forEach(node => {
+      const room = node.roomData;
+      const div = document.createElement('div');
+      div.className = "w-[60px] h-[80px] border border-gray-800 bg-[#050505] flex flex-col items-center justify-center p-1 rounded-sm";
+      div.id = `node-preview-${node.id}`;
+      div.innerHTML = `
+        <div class="text-[1.5rem] grayscale">${room.icon}</div>
+        <div class="text-[8px] text-gray-500 mt-1">${room.name}</div>
+      `;
+      topRow.appendChild(div);
+    });
+    container.appendChild(topRow);
+  }
+
+  const svgLayer = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svgLayer.setAttribute("class", "absolute inset-0 w-full h-full z-0 pointer-events-none");
+  container.appendChild(svgLayer);
+
+  const bottomRow = document.createElement('div');
+  bottomRow.className = "flex justify-center gap-3 w-full relative z-10";
+  currentMapNode.next.forEach((nextNode, index) => {
+    const room = nextNode.roomData;
+    const btn = document.createElement('button');
+    btn.className = "card-hover w-[90px] h-[120px] border border-gray-700 bg-black flex flex-col items-center justify-between p-2 rounded-sm";
+    btn.id = `node-choice-${nextNode.id}`;
+    btn.onclick = () => enterRoom(index);
+    btn.innerHTML = `
+      <div class="text-[8px] text-gray-500 w-full text-left truncate tracking-widest uppercase">${room.desc}</div>
+      <div class="text-[2rem]">${room.icon}</div>
+      <div class="text-[10px] text-gray-300 font-bold uppercase tracking-wider text-center w-full border-t border-gray-800 pt-1 mt-1 bg-black">${room.name}</div>
+    `;
+    bottomRow.appendChild(btn);
+  });
+  container.appendChild(bottomRow);
+
+  requestAnimationFrame(() => {
+    const containerRect = container.getBoundingClientRect();
+    currentMapNode.next.forEach(nextNode => {
+      const startEl = document.getElementById(`node-choice-${nextNode.id}`);
+      if (!startEl) return;
+      const startRect = startEl.getBoundingClientRect();
+      const startX = startRect.left + startRect.width / 2 - containerRect.left;
+      const startY = startRect.top - containerRect.top;
+
+      nextNode.next.forEach(nextNextNode => {
+        const endEl = document.getElementById(`node-preview-${nextNextNode.id}`);
+        if (!endEl) return;
+        const endRect = endEl.getBoundingClientRect();
+        const endX = endRect.left + endRect.width / 2 - containerRect.left;
+        const endY = endRect.bottom - containerRect.top;
+
+        const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+        line.setAttribute("x1", startX);
+        line.setAttribute("y1", startY);
+        line.setAttribute("x2", endX);
+        line.setAttribute("y2", endY);
+        line.setAttribute("stroke", "#374151");
+        line.setAttribute("stroke-width", "2");
+        line.setAttribute("stroke-dasharray", "4 4");
+        svgLayer.appendChild(line);
+      });
+    });
+  });
+}
+
+function enterRoom(nextIndex) {
+  if (!currentMapNode.next[nextIndex]) return;
+  currentMapNode = currentMapNode.next[nextIndex];
+  const room = currentMapNode.roomData;
+  floorCount = currentMapNode.floor;
+  updateStatusUI();
+
+  if (room.id === 'boss') startBattle('boss');
+  else if (room.id === 'monster') startBattle('normal');
+  else if (room.id === 'elite') startBattle('rare');
+  else if (room.id === 'event') startEvent();
+  else if (room.id === 'rest') startRest();
+  else if (room.id === 'trap') {
+    const dmg = 10; player.hp = Math.max(1, player.hp - dmg);
+    logMsg(`> 罠にかかった。${dmg} のダメージを受けた。`, "text-red-500"); updateStatusUI();
+    setTimeout(showExploreMenu, 800);
+  }
+  else {
+    logMsg("> 空き部屋を通り抜けた。", "text-gray-600");
+    setTimeout(showExploreMenu, 800);
+  }
+}
+
+function startBattle(type) {
+  isEnemyTurn = false;
+  switchMenu('battleMenu');
+  const enemyInfo = document.getElementById('enemyInfo');
+  if(enemyInfo) enemyInfo.classList.remove('hidden');
+  
+  const visualView = document.getElementById('visualView');
+  
+  if (type === 'boss') {
+    currentEnemy = { 
+      uid: 'enemy_boss', 
+      name: currentDungeon.boss.name,
+      sprite: currentDungeon.boss.sprite,
+      hp: currentDungeon.boss.hp,
+      maxHp: currentDungeon.boss.hp, 
+      baseStats: { atk: currentDungeon.boss.atk, def: currentDungeon.boss.def },
+      shield: 0,
+      isBoss: true
+    };
+    if(visualView) visualView.className = "h-[45%] md:h-[55%] shrink-0 w-full border-b border-gray-800 relative overflow-hidden flex items-center justify-center transition-colors duration-500 " + currentDungeon.boss.bg;
+    logMsg(`> ボス遭遇: ${currentEnemy.name}`, "text-red-700 font-bold tracking-widest");
+  } else if (type === 'rare') {
+    const template = currentDungeon.rareEnemies[Math.floor(Math.random() * currentDungeon.rareEnemies.length)];
+    const multi = 1 + (floorCount * 0.1);
+    currentEnemy = { 
+      uid: `enemy_rare_${floorCount}`, name: template.name, sprite: template.sprite,
+      hp: Math.floor(template.hp * multi), maxHp: Math.floor(template.hp * multi),
+      baseStats: { atk: Math.floor(template.atk * multi), def: Math.floor(template.def * multi) }, shield: 0
+    };
+    if(visualView) visualView.className = "h-[45%] md:h-[55%] shrink-0 w-full border-b border-gray-800 relative overflow-hidden flex items-center justify-center transition-colors duration-500 " + template.bg;
+    logMsg(`> 強敵遭遇: ${currentEnemy.name}`, "text-yellow-600 font-bold tracking-widest");
+  } else {
+    const template = currentDungeon.enemies[Math.floor(Math.random() * currentDungeon.enemies.length)];
+    const multi = 1 + (floorCount * 0.1);
+    currentEnemy = { 
+      uid: `enemy_${floorCount}`, name: template.name, sprite: template.sprite,
+      hp: Math.floor(template.hp * multi), maxHp: Math.floor(template.hp * multi),
+      baseStats: { atk: Math.floor(template.atk * multi), def: Math.floor(template.def * multi) }, shield: 0
+    };
+    if(visualView) visualView.className = "h-[45%] md:h-[55%] shrink-0 w-full border-b border-gray-800 relative overflow-hidden flex items-center justify-center transition-colors duration-500 " + template.bg;
+    logMsg(`> 敵遭遇: ${currentEnemy.name}`, "text-gray-400 tracking-widest");
+  }
+
+  const sprite = document.getElementById('enemySprite');
+  if(sprite) {
+    sprite.textContent = currentEnemy.sprite;
+    if(!sprite.classList.contains('anim-bobble')) sprite.classList.add('anim-bobble');
+  }
+  
+  const enemyName = document.getElementById('enemyName');
+  if(enemyName) enemyName.textContent = currentEnemy.name;
+  const enemyHpBar = document.getElementById('enemyHpBar');
+  if(enemyHpBar) enemyHpBar.style.width = '100%';
+  
+  em.emit('OnBattleStart', { player, enemy: currentEnemy });
+  em.resetTurn();
+  em.emit('OnTurnStart', { entity: player });
+}
+
+window.executeAction = function(type) {
+  if (isEnemyTurn || player.hp <= 0 || !currentEnemy || currentEnemy.hp <= 0) return;
+  
+  if (type === 'attack') {
+    let ctx = { source: player, target: currentEnemy, damage: player.baseStats.atk, tags: ['physical', 'melee'], cancel: false };
+    ctx = em.emit('BeforeAttack', ctx);
+    if (!ctx.cancel) {
+      logMsg(`> ${player.name} の攻撃。`, "text-gray-300");
+      battle.dealDamage(player, currentEnemy, ctx.damage, ctx.tags);
+      em.emit('AfterAttack', ctx);
+    }
+  } else if (type === 'defend') {
+    logMsg(`> ${player.name} は防御した。`, "text-gray-300");
+    const amt = 15 + Math.floor(player.baseStats.def * 0.5);
+    battle.addShield(player, amt);
+  } else if (type === 'heal') {
+    let ctx = { source: player, target: player, damage: player.baseStats.atk * 1.5, tags: ['magic', 'heal_spell'], cancel: false };
+    ctx = em.emit('BeforeAttack', ctx);
+    if (!ctx.cancel) {
+      logMsg(`> ${player.name} は回復魔法を唱えた。`, "text-blue-300");
+      battle.doHeal(player, player, Math.floor(ctx.damage));
+    }
+  } else if (type === 'flee') {
+    if (currentEnemy.isBoss) { logMsg("> ボス戦からは逃げられない！", "text-red-700"); return; }
+    if (Math.random() < 0.6) {
+      logMsg("> 撤退に成功した。", "text-gray-500");
+      setTimeout(() => returnToBase(), 1000); return;
+    } else { 
+      logMsg("> 撤退に失敗した！", "text-red-700"); 
+    }
+  }
+  
+  finishPlayerTurn();
+}
+
+function finishPlayerTurn() {
+  em.emit('OnTurnEnd', { entity: player });
+  if (!currentEnemy || currentEnemy.hp <= 0) return;
+  
+  isEnemyTurn = true;
+  setTimeout(enemyAction, 600);
+}
+
+function enemyAction() {
+  if (!currentEnemy || currentEnemy.hp <= 0) return;
+  em.emit('OnTurnStart', { entity: currentEnemy });
+  
+  if (currentEnemy.hp > 0) {
+    let dmg = currentEnemy.baseStats.atk + Math.floor(Math.random() * 5);
+    let ctx = { source: currentEnemy, target: player, damage: dmg, tags: ['physical', 'melee'], cancel: false };
+    ctx = em.emit('BeforeAttack', ctx);
+    if (!ctx.cancel) {
+      logMsg(`> ${currentEnemy.name} の攻撃。`, "text-gray-500");
+      battle.dealDamage(currentEnemy, player, ctx.damage, ctx.tags);
+      em.emit('AfterAttack', ctx);
+    }
+  }
+  
+  em.emit('OnTurnEnd', { entity: currentEnemy });
+  isEnemyTurn = false;
+  
+  if (player.hp > 0) {
+    em.resetTurn();
+    em.emit('OnTurnStart', { entity: player });
+  }
+}
+
+function onBattleWin() {
+  const isBoss = (currentMapNode.type === 'boss');
+  currentEnemy = null;
+  player.hp = player.maxHp;
+  player.shield = 0;
+  updateStatusUI();
+  logMsg("> 戦闘終了。HPが全回復した。", "text-green-600 tracking-widest");
+  
+  if (isBoss) {
+    logMsg(`> ボスを撃破した！`, "text-gray-300 tracking-widest");
+    if (GameState.targetDungeonId === GameState.clearedStages) GameState.clearedStages++;
+    setTimeout(() => { 
+        if (GameState.clearedStages >= dungeons.length) { 
+            startVN(800); 
+        } else { 
+            returnToBase(); 
+        } 
+    }, 2000);
+  } else {
+    setTimeout(showRewardScreen, 1000);
+  }
+}
+
+function startEvent() {
+  switchMenu('eventMenu');
+  const sprite = document.getElementById('enemySprite');
+  if(sprite) sprite.textContent = "🧙‍♂️";
+  logMsg("> 怪しい商人と遭遇した。", "text-purple-500 tracking-widest");
+  
+  const container = document.getElementById('eventOptions');
+  if(!container) return;
+  container.innerHTML = '';
+  
+  const b1 = document.createElement('button');
+  b1.className = "bg-[#050505] border border-gray-700 hover:bg-[#111] p-3 text-gray-300 w-full uppercase text-xs";
+  b1.innerText = "血を捧げる (最大HPを半減し、遺物を得る)";
+  b1.onclick = () => {
+    const cost = Math.floor(player.maxHp * 0.5);
+    player.maxHp = Math.max(1, player.maxHp - cost);
+    player.hp = Math.min(player.hp, player.maxHp);
+    logMsg(`> ${cost} の最大HPを犠牲にした。`, "text-red-500");
+    updateStatusUI();
+    showRewardScreen(); 
+  };
+  
+  const b2 = document.createElement('button');
+  b2.className = "bg-black border border-gray-800 hover:bg-[#111] p-3 text-gray-500 w-full uppercase text-xs";
+  b2.innerText = "立ち去る";
+  b2.onclick = () => {
+    logMsg("> その場を立ち去った。", "text-gray-500");
+    showExploreMenu();
+  };
+  
+  container.append(b1, b2);
+}
+
+function startRest() {
+  switchMenu('eventMenu');
+  const sprite = document.getElementById('enemySprite');
+  if(sprite) sprite.textContent = "⛲";
+  logMsg("> 静かな泉を見つけた。", "text-cyan-600 tracking-widest");
+  
+  const container = document.getElementById('eventOptions');
+  if(!container) return;
+  container.innerHTML = '';
+  
+  const b1 = document.createElement('button');
+  b1.className = "bg-[#050505] border border-gray-700 hover:bg-[#111] p-3 text-gray-300 w-full uppercase text-xs";
+  b1.innerText = "修行する (恒久的に攻撃力+5)";
+  b1.onclick = () => {
+    player.baseStats.atk += 5;
+    calcStats();
+    logMsg("> 攻撃力が 5 上昇した。", "text-yellow-500");
+    showExploreMenu();
+  };
+  
+  container.append(b1);
+}
+
+function showRewardScreen() {
+  switchMenu('rewardMenu');
+  logMsg("> 遺物を一つ選べ。", "text-yellow-600 tracking-widest");
+  
+  const availableKeys = Object.keys(ArtifactDB).filter(k => !player.passives.find(p => p.id === k));
+  availableKeys.sort(() => Math.random() - 0.5);
+  const choices = availableKeys.slice(0, 3);
+  
+  const container = document.getElementById('rewardOptions');
+  if(!container) return;
+  container.innerHTML = '';
+  
+  if(choices.length === 0) {
+     const btn = document.createElement('button');
+     btn.className = "bg-black border border-gray-800 hover:bg-[#111] p-3 text-gray-500 w-full uppercase text-xs";
+     btn.innerText = "進む (もう遺物はない)";
+     btn.onclick = () => showExploreMenu();
+     container.appendChild(btn);
+     return;
+  }
+  
+  choices.forEach(k => {
+     const art = ArtifactDB[k];
+     const btn = document.createElement('button');
+     btn.className = "bg-[#050505] border border-gray-700 hover:bg-gray-800 p-3 text-left w-full card-hover";
+     btn.innerHTML = `<span class="text-xl mr-2">${art.icon}</span><span class="text-gray-200 font-bold uppercase text-xs tracking-widest">${art.name}</span><br><span class="text-[10px] text-gray-500 uppercase">${art.desc}</span>`;
+     btn.onclick = () => {
+        logMsg(`> [${art.name}] を獲得した。`, "text-yellow-500");
+        player.passives.push(art);
+        rebuildPassives();
+        showExploreMenu();
+     };
+     container.appendChild(btn);
+  });
+}
+
+window.openStatusModal = function() {
+  const modal = document.getElementById('statusModal');
+  if(!modal) return;
+  
+  document.getElementById('modalMaxHp').textContent = player.maxHp;
+  document.getElementById('modalAtk').textContent = player.baseStats.atk;
+  document.getElementById('modalDef').textContent = player.baseStats.def;
+  document.getElementById('modalSpd').textContent = player.baseStats.spd;
+  
+  const listContainer = document.getElementById('modalArtifactList');
+  listContainer.innerHTML = '';
+  
+  if (player.passives.length === 0) {
+    listContainer.innerHTML = '<div class="text-gray-600 text-xs">現在所持している遺物はありません。</div>';
+  } else {
+    player.passives.forEach(p => {
+      const item = document.createElement('div');
+      item.className = "bg-black border border-gray-800 p-2 flex gap-3 items-center";
+      item.innerHTML = `
+        <div class="text-2xl shrink-0">${p.icon}</div>
+        <div class="flex flex-col">
+          <div class="text-gray-200 text-xs font-bold tracking-widest">${p.name}</div>
+          <div class="text-[10px] text-gray-500 mt-1 leading-tight">${p.desc}</div>
+        </div>
+      `;
+      listContainer.appendChild(item);
+    });
+  }
+  
+  modal.classList.remove('hidden');
+};
+
+window.closeStatusModal = function() {
+  const modal = document.getElementById('statusModal');
+  if(modal) modal.classList.add('hidden');
+};
+
+window.onload = () => { 
+  try {
+    rebuildPassives();
+    calcStats(); 
+    logMsg("> SYSTEM ONLINE.", "text-gray-600");
+    startVN(0); 
+  } catch(e) {
+    console.error("Boot error:", e);
+  }
+};
+</script>
+</body>
+</html>
