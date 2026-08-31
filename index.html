@@ -604,6 +604,11 @@ function switchMenu(menuId) {
   ['baseMenu', 'dungeonSelect', 'exploreMenu', 'battleMenu', 'eventMenu', 'rewardMenu'].forEach(id => {
     const el = document.getElementById(id);
     if(el) el.classList.add('d-none');
+
+    // 【追加・修正】画面切り替え時に、連打防止用のロックをすべて確実に解除する
+  ['rewardOptions', 'eventOptions', 'mapTreeContainer'].forEach(id => {
+    const container = document.getElementById(id);
+    if (container) container.style.pointerEvents = ''; // 空文字を入れることでインラインスタイルを初期化
   });
   const target = document.getElementById(menuId);
   if(target) target.classList.remove('d-none');
