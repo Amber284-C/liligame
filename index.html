@@ -1064,6 +1064,10 @@ function startRest() {
   
   const container = document.getElementById('eventOptions');
   if(!container) return;
+
+// 【追加】前回のロックを解除する
+  container.style.pointerEvents = 'auto';
+
   container.innerHTML = '';
   
   const b1 = document.createElement('button');
@@ -1090,6 +1094,10 @@ function showRewardScreen() {
   
   const container = document.getElementById('rewardOptions');
   if(!container) return;
+
+// 【追加】前回のロックを解除する
+  container.style.pointerEvents = 'auto';
+  
   container.innerHTML = '';
   
   if(choices.length === 0) {
