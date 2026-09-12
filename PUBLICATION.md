@@ -28,6 +28,12 @@
 1. このフォルダーの中身を新しいGitHubリポジトリへアップロードします。
 2. ローカルで実行する場合は Node.js 22.13以上で `npm install` を実行します。
 3. `npm test` でテストし、`npm run dev` で開発画面を開きます。
-4. 公開用ファイルは `npm run build` で生成します。
+4. GitHub Pages用の公開ファイルは `npm run build:pages` で生成します。
+
+## GitHub Pagesの設定
+
+`.github/workflows/deploy-pages.yml` が、mainブランチへの更新時に自動でテスト・ビルド・公開を行います。GitHubのリポジトリで Settings → Pages → Build and deployment → Source を「GitHub Actions」に設定してください。過去に「Deploy from a branch」を選んでいた場合も「GitHub Actions」へ変更します。
+
+リポジトリ名 `liligame` に合わせて `/liligame/` から画像やJavaScriptを読み込む設定です。リポジトリ名を変更するときは `next.config.ts`、`lib/site-path.ts`、`app/globals.css` にある `/liligame` も新しい名前へ変更してください。
 
 ZIPをGitHubのリポジトリ画面へそのまま置くのではなく、ZIPを展開して、中にあるファイルとフォルダーをアップロードしてください。

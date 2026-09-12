@@ -1,9 +1,10 @@
 import { PuddingGame, BLOCKS, GAPS, PLATFORMS, FLOOR, WORLD_END, CHECKPOINTS } from './game';
+import {sitePath} from './site-path';
 export type Art={room:HTMLImageElement;street:HTMLImageElement;sprites:HTMLCanvasElement[]};
 const BOXES=[[40,42,325,465],[396,43,328,463],[765,43,342,468],[1155,43,345,470],[28,525,315,442],[384,565,337,359],[730,525,336,430],[1120,530,339,434]];
 function load(src:string):Promise<HTMLImageElement>{return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error(`画像を読み込めませんでした: ${src}`));im.src=src})}
 export async function loadArt():Promise<Art>{
- const [room,street,atlas]=await Promise.all([load('/bedroom.webp'),load('/shopping-street.webp'),load('/character-atlas.webp')]);
+ const [room,street,atlas]=await Promise.all([load(sitePath('bedroom.webp')),load(sitePath('shopping-street.webp')),load(sitePath('character-atlas.webp'))]);
  // The supplied animation atlas uses a neutral color key. Resolve it only in
  // the rendering surface; enclosed costume highlights remain intact.
  const sprites=BOXES.map(([x,y,w,h])=>{
