@@ -32,6 +32,12 @@ function observationRow(activity:string,dressed:boolean){
 function drawWaiting(ctx:CanvasRenderingContext2D,g:PuddingGame,art:Art,x:number,bottom:number,size:number,reducedMotion:boolean){
  const row=observationRow(g.activity,g.done[3]);
  const pose=g.observationFrame;
+ if(g.activity==='sleep'){
+  // Keep her cheek tucked into her arms while waiting, even if a switch goes by.
+  const column=g.observationPose==='notice'?(pose==='glance'&&!reducedMotion?2:3):5;
+  drawCel(ctx,art.preparation,7,7,row,column,x,bottom,size);
+  return;
+ }
  if(pose==='dismiss'){
   drawCel(ctx,art.gestures,3,5,row,2,x,bottom,size);
   return;
@@ -39,13 +45,9 @@ function drawWaiting(ctx:CanvasRenderingContext2D,g:PuddingGame,art:Art,x:number
  let column=OBSERVATION_CEL[pose];
  if(reducedMotion){
   column=g.observationPose==='notice'?3:0;
- }else if(pose==='rest'){
-  // Hold the exhale longer than the inhale. After 16:00 the idle hand taps twice.
-  if(g.activity==='sleep')column=g.age%3.6>=1.55?5:0;
-  if(g.activity==='idle'&&g.late){
-   const beat=g.age%1.3;
-   column=beat<.13||(beat>.26&&beat<.40)?5:0;
-  }
+ }else if(pose==='rest'&&g.activity==='idle'&&g.late){
+  const beat=g.age%1.3;
+  column=beat<.13||(beat>.26&&beat<.40)?5:0;
  }
  drawCel(ctx,art.preparation,7,7,row,column,x,bottom,size);
 }
@@ -169,9 +171,12 @@ export function renderGame(ctx:CanvasRenderingContext2D,g:PuddingGame,art:Art,t:
    }else{
     drawWaiting(ctx,g,art,x,bottom,size,reducedMotion);
    }
-   if(g.activity==='sleep'&&g.observationFrame==='rest'){
-    const drift=reducedMotion?0:Math.sin(age*1.8)*7;
-    text(ctx,'z',x+57,bottom-107-drift,20,'#ead2f4');text(ctx,'Z',x+76,bottom-131-drift,26,'#ead2f4');
+   if(g.activity==='sleep'&&g.observationPose!=='notice'){
+    const breath=reducedMotion?.5:(1-Math.cos(age*2*Math.PI/4))/2;
+    ctx.save();
+    ctx.globalAlpha=.45+breath*.30;
+    text(ctx,'z',x+47,bottom-149-breath*5,19,'#ead2f4');
+    ctx.restore();
    }
    if(g.activity==='stream'||feedback?.activity==='stream'){
     ctx.fillStyle='#572c59e0';ctx.fillRect(width*.58-94,65,192,43);

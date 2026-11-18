@@ -22,7 +22,7 @@ test('sleep and idle show an advance gesture, then a different reaction on expir
   const g=make();g.start(0);
   if(activity==='idle'){g.done[0]=g.done[1]=true;g.activity='idle';}
   g.tick(500,.016);assert.equal(g.observationPose,'rest');
-  g.tick(1400,.016);assert.equal(g.observationPose,'notice');assert.equal(g.motivation(),false);
+  g.tick(1520,.016);assert.equal(g.observationPose,'notice');assert.equal(g.motivation(),false);
   g.tick(1800,.016);assert.equal(g.switchOn,true);
   const end=g.switchUntil;
   g.tick((end+.01)*1000,.016);assert.equal(g.switchOn,false);assert.equal(g.observationPose,'dismiss');
@@ -31,13 +31,13 @@ test('sleep and idle show an advance gesture, then a different reaction on expir
  }
  assert.notEqual(lines[0],lines[1]);
 });
-test('bedroom feint and real cue use distinct frames without altering switch timing',()=>{
+test('sleep stays quiet between genuine cues without altering switch timing',()=>{
  let draws=0;
  const g=new PuddingGame(()=>{draws++;return .5});
  g.start(0);g.touchFriendly=true;
  const frames=[
-  [200,'feint-look'],[600,'feint-action'],[850,'feint-settle'],[990,'rest'],
-  [1070,'tension'],[1320,'glance'],[1540,'notice'],
+  [200,'rest'],[600,'rest'],[850,'rest'],[990,'rest'],[1400,'rest'],
+  [1460,'glance'],[1600,'notice'],
  ];
  for(const [time,frame] of frames){
   g.tick(time,.016);assert.equal(g.observationFrame,frame);assert.equal(g.switchOn,false);
@@ -46,6 +46,12 @@ test('bedroom feint and real cue use distinct frames without altering switch tim
  g.tick(1800,.016);
  assert.equal(g.switchOn,true);assert.equal(g.switchUntil,1.8+1.15+.5*.35);
  assert.equal(draws,3);
+ g.tick((g.switchUntil+.01)*1000,.016);
+ const next=g.nextSwitch;
+ assert.equal(g.observationPose,'dismiss');
+ g.tick((next-1.5)*1000,.016);assert.equal(g.observationFrame,'rest');
+ g.tick((next-.16)*1000,.016);assert.equal(g.observationFrame,'notice');
+ assert.equal(g.activity,'sleep');assert.equal(g.sleeps,0);
 });
 test('the first stream can feint but a short cue skips to the held pose',()=>{
  const g=make();g.start(0);g.autoWoke=true;g.done[0]=g.done[1]=true;g.activity='idle';g.idleUntil=0;

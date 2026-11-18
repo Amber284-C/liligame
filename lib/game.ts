@@ -5,6 +5,8 @@ export type ObservationPose = 'rest'|'notice'|'dismiss';
 export type ObservationFrame = ObservationPose|'tension'|'glance'|'feint-look'|'feint-action'|'feint-settle';
 type MotivationBeat = {activity:WaitingActivity;dressed:boolean;at:number};
 const SWITCH_CUE_SECONDS = .75;
+const SLEEP_CUE_SECONDS = .38;
+const SLEEP_FINGER_SECONDS = .23;
 const MOTIVATION_HOLD = .08;
 const MISSED_SWITCH_LINES: Record<WaitingActivity, readonly string[]> = {
  sleep:['「今のは明日のわしに任せたのじゃ。」','「片目ぶんは起きたのじゃ。」'],
@@ -68,21 +70,23 @@ export class PuddingGame {
   if(this.phase!=='prep'||!this.waitingActivity||this.switchOn)return 'rest';
   if(this.age<this.dismissUntil)return 'dismiss';
   const untilSwitch=this.nextSwitch-this.age;
-  return !this.waitEndsBeforeSwitch&&untilSwitch>0&&untilSwitch<=SWITCH_CUE_SECONDS ? 'notice' : 'rest';
+  const cueSeconds=this.activity==='sleep'?SLEEP_CUE_SECONDS:SWITCH_CUE_SECONDS;
+  return !this.waitEndsBeforeSwitch&&untilSwitch>0&&untilSwitch<=cueSeconds ? 'notice' : 'rest';
  }
  get observationFrame():ObservationFrame {
   const pose=this.observationPose;
   const untilSwitch=this.nextSwitch-this.age;
   if(pose==='notice'){
+   // While asleep, the eyes and hand move only in the last fraction of a second.
+   if(this.activity==='sleep')return untilSwitch>SLEEP_FINGER_SECONDS?'glance':'notice';
    // Leave enough time to read the raised finger even when the schedule is tight.
    if(this.late||(this.activity==='stream'&&this.activityUntil-this.nextSwitch<.35))return 'notice';
    if(untilSwitch>.55)return 'tension';
    return untilSwitch>.34?'glance':'notice';
   }
   if(pose!=='rest'||this.phase!=='prep'||this.switchOn||this.late||this.waitEndsBeforeSwitch)return pose;
-  // Time feints from the existing schedule so they never consume a gameplay random draw.
-  const feint=(this.activity==='sleep'&&this.skippedSwitches.sleep%3===0)
-   ||(this.activity==='stream'&&this.streams%2===1&&this.skippedSwitches.stream%3===0);
+  // Stream feints use the existing schedule and never consume a gameplay random draw.
+  const feint=this.activity==='stream'&&this.streams%2===1&&this.skippedSwitches.stream%3===0;
   if(!feint||untilSwitch<=.82||untilSwitch>1.69)return pose;
   if(untilSwitch>1.29)return 'feint-look';
   return untilSwitch>1.02?'feint-action':'feint-settle';
