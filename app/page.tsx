@@ -10,6 +10,7 @@ import { loadArt, renderGame, type Art } from '@/lib/render-game';
 import {sitePath} from '@/lib/site-path';
 const STEPS = ['起きる', '歯みがき', '髪をととのえる', '着替える', '出発！'];
 const MODES:Record<string,string>={sleep:'ねむねむモード',idle:'やる気、捜索中',wake:'起床中',brush:'歯みがき中',hair:'髪をセット中',dress:'お着替え中',depart:'おでかけ！',stream:'配信中'};
+const STAMP_NOTICE_SECONDS = .9;
 export default function Home(){
  const game=useRef(new PuddingGame()),canvas=useRef<HTMLCanvasElement>(null),art=useRef<Art|null>(null),input=useRef(new GameControls());
  const [ready,setReady]=useState(false),[assetError,setAssetError]=useState(false),[help,setHelp]=useState(false),[sound,setSound]=useState(false);
@@ -20,11 +21,12 @@ export default function Home(){
  const play=(notes:number[]= [523,659,784])=>{if(!soundRef.current)return;try{audio.current??=new AudioContext();void audio.current.resume();const c=audio.current;notes.forEach((freq,i)=>{const o=c.createOscillator(),v=c.createGain();o.type='triangle';o.frequency.value=freq;v.gain.setValueAtTime(.045,c.currentTime+i*.09);v.gain.exponentialRampToValueAtTime(.001,c.currentTime+i*.09+.16);o.connect(v);v.connect(c.destination);o.start(c.currentTime+i*.09);o.stop(c.currentTime+i*.09+.18)})}catch{}};
  const start=()=>{if(!art.current)return;setChoosing(false);game.current.start(Date.now());input.current.clear();refresh();play()};
  const choose=(value:unknown)=>{game.current.setDifficulty(value);refresh()};
- const motivate=()=>{if(game.current.motivation()){play();refresh()}};
+ const motivate=()=>{if(game.current.motivation(Date.now()))play();refresh()};
  const fetchArt=()=>{setAssetError(false);void loadArt().then(a=>{art.current=a;setReady(true)}).catch(()=>setAssetError(true))};
  useEffect(()=>{
   fetchArt();
   const touchQuery=window.matchMedia('(any-pointer: coarse)');
+  const motionQuery=window.matchMedia('(prefers-reduced-motion: reduce)');
   const setTouchMode=()=>{game.current.touchFriendly=touchQuery.matches};
   setTouchMode();touchQuery.addEventListener('change',setTouchMode);
   let frame=0,last=Date.now(),lastUI=0,lastDraw=0,canvasWidth=960;
@@ -33,15 +35,16 @@ export default function Home(){
   if(canvas.current)observer?.observe(canvas.current);window.addEventListener('resize',resize);resize();
   const loop=()=>{
    const now=Date.now(),dt=Math.max(0,(now-last)/1000);last=now;
-   const model=game.current,oldPhase=model.phase,oldHits=model.hits;
+   const model=game.current,oldPhase=model.phase,oldHits=model.hits,oldAge=model.age,oldSwitch=model.switchOn;
    model.tick(now,dt,input.current.consume());
    if(model.hits>oldHits)play([180,120]);
    if(model.phase==='won'&&oldPhase!=='won')play([523,659,784,1046]);
    if(model.phase==='lost'&&oldPhase!=='lost')play([330,262,196]);
    if(canvas.current&&art.current&&now-lastDraw>=(model.touchFriendly?1000/30:1000/60)){
-    lastDraw=now;const ctx=canvas.current.getContext('2d');if(ctx)renderGame(ctx,model,art.current,now/1000,canvasWidth);
+    lastDraw=now;const ctx=canvas.current.getContext('2d');if(ctx)renderGame(ctx,model,art.current,now/1000,canvasWidth,motionQuery.matches);
    }
-   if(model.hits!==oldHits||model.phase!==oldPhase||now-lastUI>=100){lastUI=now;update(v=>v+1)}frame=requestAnimationFrame(loop);
+   const completed=model.completedAt.some(at=>at!==null&&at>oldAge);
+   if(completed||model.switchOn!==oldSwitch||model.hits!==oldHits||model.phase!==oldPhase||now-lastUI>=100){lastUI=now;update(v=>v+1)}frame=requestAnimationFrame(loop);
   };
   frame=requestAnimationFrame(loop);
   const clear=()=>{input.current.clear();document.querySelectorAll<HTMLElement>('.touch-controls [data-pressed]').forEach(button=>delete button.dataset.pressed)};
@@ -70,6 +73,7 @@ export default function Home(){
  },[]);
  const hour=Math.floor(g.minute/60).toString().padStart(2,'0'),minute=Math.floor(g.minute%60).toString().padStart(2,'0');
  const remain=Math.max(0,Math.ceil(1080-g.minute));const ended=g.phase==='won'||g.phase==='lost';
+ const recentCompletion=g.completedAt.findIndex(at=>at!==null&&g.age-at<STAMP_NOTICE_SECONDS);
  const control=(which:Control)=>({
   onPointerDown:(e:React.PointerEvent<HTMLButtonElement>)=>{e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);e.currentTarget.dataset.pressed='true';input.current.pressPointer(e.pointerId,which);if(which==='jump')play([440])},
   onPointerUp:(e:React.PointerEvent<HTMLButtonElement>)=>{input.current.releasePointer(e.pointerId);delete e.currentTarget.dataset.pressed},
@@ -92,12 +96,21 @@ export default function Home(){
  {g.phase==='prep'&&<><div className="motivation-status"><Zap size={15}/>{g.late?'やる気、覚醒中！':'やる気スイッチをさがそう'}<span>{g.late?'今がチャンス':'16:00までは気まぐれ'}</span></div>{g.switchOn&&!g.busy&&<button className={'motivation-switch '+(g.late?'motivated':'')} style={{left:`calc(12px + (100% - var(--switch-width) - 24px) * ${g.switchX})`,top:`calc(56px + (100% - var(--switch-height) - 84px) * ${g.switchY})`}} onPointerDown={e=>{e.stopPropagation();e.preventDefault();motivate()}} onClick={e=>{if(e.detail===0)motivate()}} aria-label={`やる気スイッチ：${STEPS[g.nextStep]}`}><span><Zap size={21} fill="currentColor"/>やる気スイッチ</span><small>{STEPS[g.nextStep]}！</small></button>}</>}
  {g.active&&g.notice&&g.noticeUntil>g.age&&<div className={'game-notice '+(g.busy?'busy-notice':'')} aria-live="polite">{g.notice}</div>}
  {g.phase==='travel'&&<div className="travel-distance"><span>プリンまで あと {Math.max(0,Math.ceil((WORLD_END-75-g.x)/10))}m</span><Progress value={g.x/WORLD_END*100} aria-label="プリン屋までの進み具合"/></div>}
+ {g.active&&recentCompletion>=0&&<div aria-hidden="true" className={'prep-completion-notice'+(recentCompletion===4?' departure-complete':'')} key={`${recentCompletion}:${g.completedAt[recentCompletion]}`}><Check size={16} strokeWidth={3}/>{STEPS[recentCompletion]}</div>}
  {ended&&!choosing&&<div className="result-scrim"><div className={'result-card '+(g.phase==='won'?'success':'')}><span className="result-emoji">{g.phase==='won'?'🍮':'🌙'}</span><span className="tiny-label">{g.phase==='won'?'MISSION COMPLETE':'GAME OVER'}</span><h2>{g.phase==='won'?'プリン、買えた！':'プリン屋、閉まった。'}</h2><p>{g.phase==='won'?'今日のやる気は、すべて使い切ったのじゃ。':g.travelStarted?'家を出ただけでも、えらかったのじゃ。':'明日こそ、本気を出すのじゃ。'}</p><span className={"result-difficulty difficulty-badge "+g.difficulty}>{DIFFICULTIES[g.difficulty].name}</span><div className="result-stats"><span>{g.phase==='won'?'到着':'閉店'}<b>{hour}:{minute}</b></span><span>二度寝<b>{g.sleeps} 回</b></span><span>配信<b>{g.streams} 回</b></span><span>ミス<b>{g.hits} 回</b></span></div><button className="primary-button" onClick={start}><RotateCcw size={17}/>同じ難易度でもう一日</button><button className="secondary-button change-difficulty" onClick={()=>setChoosing(true)}>難易度を選び直す</button></div></div>}
  <span className="scene-location">{g.travelStarted?<Footprints size={14}/>:<Moon size={14}/>} {g.travelStarted?'夕焼け商店街':'リリーのお部屋'}</span>
  </div>
  {g.phase==='travel'&&<div className="touch-controls" aria-label="移動とジャンプの操作" onContextMenu={e=>e.preventDefault()}><div><button aria-label="左に移動" {...control('left')}><ArrowLeft/><small>左</small></button><button aria-label="右に移動" {...control('right')}><ArrowRight/><small>右</small></button></div><span>← → 移動 <kbd>SPACE</kbd> ジャンプ</span><button className="jump-button" aria-label="ジャンプ" {...control('jump')}>ジャンプ ↑</button></div>}
  <div className="dialogue" aria-live="polite" aria-atomic="true"><div className="portrait"><img src={sitePath('character-reference.webp')} alt=""/></div><div><span className="speaker">リリー <span>{g.phase==='won'?'ごきげん':g.phase==='lost'?'しょんぼり':g.travelStarted?'プリンへ一直線':MODES[g.activity]}</span></span><p>{g.quote}</p></div><span className="dialogue-mark">▼</span></div>
- <div className="prep-list">{STEPS.map((s,i)=><div className={'prep-step '+(g.done[i]?'complete':(g.pending>=0?g.pending:g.nextStep)===i?'current':'')} key={s}><span className="step-number">{g.done[i]?<Check size={14}/>:i+1}</span><span>{s}{i===1&&<small className="auto-step-label">自動</small>}</span>{i<4&&<span className="step-arrow">›</span>}</div>)}</div>
+ <div className="prep-list">{STEPS.map((s,i)=>{
+  const completed=g.completedAt[i]!==null;
+  const current=(g.pending>=0?g.pending:g.nextStep)===i;
+  return <div className={'prep-step '+(completed?'complete':current?'current':'')} key={s}>
+   <span className={'step-number'+(recentCompletion===i?' step-stamped':'')} key={g.completedAt[i]??'pending'}>{completed?<Check size={14} aria-label="完了"/>:i+1}</span>
+   <span>{s}{i===1&&<small className="auto-step-label">自動</small>}</span>
+   {i<4&&<span className="step-arrow">›</span>}
+  </div>;
+ })}</div>
  </section>
  <section className="day-timeline" aria-label="一日のタイムライン"><div className="timeline-track"><div className="early-zone"/><div className="late-zone"/><Progress value={(g.minute-540)/540*100} aria-label="一日の経過"/><span className="timeline-now" style={{left:`${(g.minute-540)/540*100}%`}} /></div><div className="timeline-labels"><span><b>09:00</b>おはよう…？</span><span><b>11:00</b>強制おめざめ</span><span><b>16:00</b><Sparkles size={13}/>やる気、覚醒</span><span><b>18:00</b>閉店ガラガラ</span></div></section>
  <footer className="game-footer"><div><span className="tip-label">あそびかた</span><p>{g.travelStarted?<>← → / A D で移動、<b>Space / ↑ でジャンプ。</b> 箱と穴に注意！</>:<>リリーの<b>目と手</b>に注目。合図のあとに、やる気スイッチをタップ。</>}</p></div><span className="footer-comment"><Heart size={14}/> やる気がないのも、仕様です。</span></footer>

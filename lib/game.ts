@@ -2,7 +2,10 @@ export type Phase = 'title'|'prep'|'travel'|'won'|'lost';
 export type Activity = 'sleep'|'idle'|'wake'|'brush'|'hair'|'dress'|'depart'|'stream';
 type WaitingActivity = 'sleep'|'idle'|'stream';
 export type ObservationPose = 'rest'|'notice'|'dismiss';
+export type ObservationFrame = ObservationPose|'tension'|'glance'|'feint-look'|'feint-action'|'feint-settle';
+type MotivationBeat = {activity:WaitingActivity;dressed:boolean;at:number};
 const SWITCH_CUE_SECONDS = .75;
+const MOTIVATION_HOLD = .08;
 const MISSED_SWITCH_LINES: Record<WaitingActivity, readonly string[]> = {
  sleep:['「今のは明日のわしに任せたのじゃ。」','「片目ぶんは起きたのじゃ。」'],
  idle:['「この手はプリン用に温存するのじゃ。」','「やる気にお休みをあげたのじゃ。」'],
@@ -37,7 +40,9 @@ export class PuddingGame {
  phase:Phase='title'; activity:Activity='sleep'; done=[false,false,false,false,false];
  minute=540; age=0; startedAt=0; penalties=0; hits=0; misses=0; streams=0; sleeps=0;
  quote='「あと5分だけ……プリンは逃げないのじゃ。」'; notice=''; noticeUntil=0;
- activityUntil=0; idleUntil=12; autoWoke=false; late=false; pending=-1;
+ activityStartedAt=0; activityUntil=0; idleUntil=12; autoWoke=false; late=false; pending=-1;
+ completedAt:(number|null)[]=[null,null,null,null,null];
+ lastMotivation:MotivationBeat|undefined=undefined;
  switchOn=false; switchX=.66; switchY=.33; switchUntil=0; nextSwitch=1.8; nextMove=0;
  private dismissUntil=0;
  private skippedSwitches: Record<WaitingActivity, number> = {sleep:0,idle:0,stream:0};
@@ -65,6 +70,29 @@ export class PuddingGame {
   const untilSwitch=this.nextSwitch-this.age;
   return !this.waitEndsBeforeSwitch&&untilSwitch>0&&untilSwitch<=SWITCH_CUE_SECONDS ? 'notice' : 'rest';
  }
+ get observationFrame():ObservationFrame {
+  const pose=this.observationPose;
+  const untilSwitch=this.nextSwitch-this.age;
+  if(pose==='notice'){
+   // Leave enough time to read the raised finger even when the schedule is tight.
+   if(this.late||(this.activity==='stream'&&this.activityUntil-this.nextSwitch<.35))return 'notice';
+   if(untilSwitch>.55)return 'tension';
+   return untilSwitch>.34?'glance':'notice';
+  }
+  if(pose!=='rest'||this.phase!=='prep'||this.switchOn||this.late||this.waitEndsBeforeSwitch)return pose;
+  // Time feints from the existing schedule so they never consume a gameplay random draw.
+  const feint=(this.activity==='sleep'&&this.skippedSwitches.sleep%3===0)
+   ||(this.activity==='stream'&&this.streams%2===1&&this.skippedSwitches.stream%3===0);
+  if(!feint||untilSwitch<=.82||untilSwitch>1.69)return pose;
+  if(untilSwitch>1.29)return 'feint-look';
+  return untilSwitch>1.02?'feint-action':'feint-settle';
+ }
+ get motivationFeedback(){
+  if(this.phase!=='prep'||!this.lastMotivation)return;
+  const {activity,dressed,at}=this.lastMotivation;
+  const elapsed=this.age-at;
+  if(elapsed<MOTIVATION_HOLD)return {activity,dressed,elapsed};
+ }
  get isTroll(){return this.difficulty==='troll'}
  setDifficulty(value:unknown){
   if(value!=='normal'&&value!=='troll')throw new Error('難易度は「おさんぽ」か「鬼畜」を選んでください。');
@@ -87,14 +115,20 @@ export class PuddingGame {
  }
  finish(){this.phase='won';this.switchOn=false;this.activity='idle';this.quote='「ほら、間に合った。計画どおりなのじゃ！」';this.say('プリン、確保！',99)}
  lose(){this.phase='lost';this.minute=1080;this.switchOn=false;this.quote=this.travelStarted?'「あとちょっと……明日こそ本気を出すのじゃ。」':'「あれ？ もう今日が終わりなのじゃ？」';this.say('18:00　閉店しました',99)}
- motivation(){
+ motivation(now?:number){
   if(this.phase!=='prep'||!this.switchOn||this.busy)return false;
+  // A tap after a delayed paint should still obey the real deadline.
+  if(now!==undefined&&(now-this.startedAt)/1000>this.age)this.tick(now,0);
+  const activity=this.waitingActivity;
+  if(this.phase!=='prep'||!this.switchOn||this.busy||!activity)return false;
   const step=this.nextStep;if(step<0)return false;
+  this.lastMotivation={activity,dressed:this.done[3],at:this.age};
   this.beginPreparation(step);return true;
  }
  beginPreparation(step:number){
   this.dismissUntil=0;
   this.switchOn=false;this.pending=step;this.activity=(['wake','brush','hair','dress','depart'] as Activity[])[step];
+  this.activityStartedAt=this.age;
   this.activityUntil=this.age+(step===4?1.8:2.3);
   this.quote=['「起きた。えらい。今日はもう十分なのじゃ。」','「歯みがきで、プリンの味が変わりそうなのじゃ。」','「この寝ぐせは……悪魔の仕様なのじゃ。」','「おでかけ服、装備。やる気は別売りなのじゃ。」','「待っておれ、プリン！ いま行くのじゃ！」'][step];
   this.say(['やる気、接続！','起きたら自動で歯みがき。しゃかしゃか…','寝ぐせと交戦中…','おでかけ服にチェンジ！','いってきます！'][step]);
@@ -165,9 +199,9 @@ export class PuddingGame {
   if(this.minute>=1080){this.lose();return;}
   if(!this.late&&this.minute>=960){this.late=true;if(this.switchOn)this.switchUntil=this.age+2.4;else this.nextSwitch=Math.min(this.nextSwitch,this.age+.65);this.say('16:00！　急にやる気が出てきた！',4)}
   if(this.phase==='prep'){
-   if(!this.autoWoke&&this.minute>=660){this.autoWoke=true;if(!this.done[0]&&this.pending!==0){this.done[0]=true;this.activity='wake';this.pending=0;this.activityUntil=this.age+1.5;this.switchOn=false;this.quote='「11時？ ……まだ朝なのじゃ。」';this.say('11:00　強制おめざめ！')}}
+   if(!this.autoWoke&&this.minute>=660){this.autoWoke=true;if(!this.done[0]&&this.pending!==0){this.done[0]=true;this.activity='wake';this.pending=0;this.activityStartedAt=this.age;this.activityUntil=this.age+1.5;this.switchOn=false;this.quote='「11時？ ……まだ朝なのじゃ。」';this.say('11:00　強制おめざめ！')}}
    if(this.pending>=0&&this.age>=this.activityUntil){
-    const finished=this.pending;this.done[finished]=true;this.pending=-1;this.activity='idle';
+    const finished=this.pending;this.done[finished]=true;this.completedAt[finished]=this.age;this.pending=-1;this.activity='idle';
     // Both player-triggered and 11:00 wake-ups flow straight into brushing.
     // Completed brushing survives a second sleep, like the other preparation.
     if(finished===0&&!this.done[1]){this.beginPreparation(1);return;}
@@ -178,8 +212,8 @@ export class PuddingGame {
    if(this.busy)return;
    if(this.activity==='idle'&&this.done[0]&&this.age>=this.idleUntil&&!this.switchOn&&this.age>=this.dismissUntil){
     this.switchOn=false;
-    if(this.minute<660&&this.random()<.58){this.done[0]=false;this.activity='sleep';this.sleeps++;this.quote='「起きるのにも疲れた……もうひと眠りなのじゃ。」';this.say('二度寝にログインしました。');this.scheduleSwitch();}
-    else{this.activity='stream';this.activityUntil=this.age+4+this.random()*2;this.nextSwitch=this.age+(this.late?.85:1.5);this.streams++;this.quote='「ちょっとだけ配信！ みんな、おはようなのじゃ♡」';this.say('まさかの配信スタート。',1);}
+    if(this.minute<660&&this.random()<.58){this.done[0]=false;this.completedAt[0]=null;this.activity='sleep';this.sleeps++;this.quote='「起きるのにも疲れた……もうひと眠りなのじゃ。」';this.say('二度寝にログインしました。');this.scheduleSwitch();}
+    else{this.activity='stream';this.activityStartedAt=this.age;this.activityUntil=this.age+4+this.random()*2;this.nextSwitch=this.age+(this.late?.85:1.5);this.streams++;this.quote='「ちょっとだけ配信！ みんな、おはようなのじゃ♡」';this.say('まさかの配信スタート。',1);}
     this.idleUntil=this.age+14;return;
    }
    if(this.switchOn){

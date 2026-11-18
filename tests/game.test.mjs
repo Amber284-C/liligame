@@ -31,6 +31,62 @@ test('sleep and idle show an advance gesture, then a different reaction on expir
  }
  assert.notEqual(lines[0],lines[1]);
 });
+test('bedroom feint and real cue use distinct frames without altering switch timing',()=>{
+ let draws=0;
+ const g=new PuddingGame(()=>{draws++;return .5});
+ g.start(0);g.touchFriendly=true;
+ const frames=[
+  [200,'feint-look'],[600,'feint-action'],[850,'feint-settle'],[990,'rest'],
+  [1070,'tension'],[1320,'glance'],[1540,'notice'],
+ ];
+ for(const [time,frame] of frames){
+  g.tick(time,.016);assert.equal(g.observationFrame,frame);assert.equal(g.switchOn,false);
+ }
+ assert.equal(draws,0);assert.equal(g.sleeps,0);assert.equal(g.nextSwitch,1.8);
+ g.tick(1800,.016);
+ assert.equal(g.switchOn,true);assert.equal(g.switchUntil,1.8+1.15+.5*.35);
+ assert.equal(draws,3);
+});
+test('the first stream can feint but a short cue skips to the held pose',()=>{
+ const g=make();g.start(0);g.autoWoke=true;g.done[0]=g.done[1]=true;g.activity='idle';g.idleUntil=0;
+ g.tick(100_000,.016);assert.equal(g.activity,'stream');
+ for(const [offset,frame] of [[100,'feint-look'],[300,'feint-action'],[550,'feint-settle'],[800,'tension'],[1000,'glance'],[1300,'notice']]){
+  g.tick(100_000+offset,.016);assert.equal(g.observationFrame,frame);assert.equal(g.switchOn,false);
+ }
+ const late=make();late.start(0);late.autoWoke=true;late.done[0]=late.done[1]=true;late.activity='idle';late.idleUntil=209;
+ late.tick(210_000,.016);assert.equal(late.activity,'stream');
+ late.tick(210_150,.016);assert.equal(late.observationFrame,'notice');assert.equal(late.switchOn,false);
+});
+test('tap feedback starts at real acceptance and neither duplicates nor accepts an expired switch',()=>{
+ const g=make();g.start(0);g.tick(1800,.016);
+ assert.equal(g.motivation(1820),true);
+ assert.deepEqual(g.motivationFeedback,{activity:'sleep',dressed:false,elapsed:0});
+ assert.equal(g.activityStartedAt,1.82);
+ assert.equal(g.motivation(1840),false);assert.equal(g.lastMotivation.at,1.82);
+ g.tick(1880,.016);assert.ok(g.motivationFeedback);assert.ok(g.minute>543.64);
+ g.tick(1901,.016);assert.equal(g.motivationFeedback,undefined);assert.equal(g.activity,'wake');
+ g.start(2000);assert.equal(g.lastMotivation,undefined);
+ g.tick(3800,.016);
+ assert.equal(g.motivation(2000+(g.switchUntil+.1)*1000),false);
+ assert.equal(g.lastMotivation,undefined);assert.equal(g.observationPose,'dismiss');
+});
+test('auto-waking and the departure stamp register only when their activities finish',()=>{
+ const g=make();g.start(0);
+ g.tick(60_000,.016);
+ assert.equal(g.activity,'wake');assert.equal(g.activityStartedAt,60);assert.equal(g.completedAt[0],null);
+ g.tick(61_700,.016);
+ assert.equal(g.activity,'brush');assert.equal(g.completedAt[0],61.7);assert.equal(g.activityStartedAt,61.7);
+ g.tick(64_100,.016);assert.equal(g.completedAt[1],64.1);
+ g.beginPreparation(4);g.tick(66_000,.016);
+ assert.equal(g.phase,'travel');assert.equal(g.completedAt[4],66);
+});
+test('second sleep removes only the wake stamp, and waking again gives it a new time',()=>{
+ const g=new PuddingGame(()=>0);g.start(0);
+ g.done=[true,true,true,false,false];g.completedAt=[.2,.5,.8,null,null];g.activity='idle';g.idleUntil=0;
+ g.tick(1000,.016);assert.deepEqual(g.completedAt,[null,.5,.8,null,null]);
+ g.switchOn=true;g.motivation();g.tick(3400,.016);
+ assert.deepEqual(g.completedAt,[3.4,.5,.8,null,null]);assert.equal(g.nextStep,3);
+});
 test('stream looks up before a real switch; tapping leaves for the next unfinished step',()=>{
  const g=make();g.start(0);g.tick(60_000,.016);g.tick(61_600,.016);g.tick(64_000,.016);
  g.tick((g.idleUntil+.01)*1000,.016);assert.equal(g.activity,'stream');

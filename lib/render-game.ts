@@ -1,10 +1,10 @@
 import { PuddingGame, BLOCKS, GAPS, PLATFORMS, FLOOR, WORLD_END, CHECKPOINTS, CARAMEL_CRACK_TIME, type Trap } from './game';
 import {sitePath} from './site-path';
-export type Art={room:HTMLImageElement;street:HTMLImageElement;sprites:HTMLCanvasElement[];gestures:HTMLImageElement};
+export type Art={room:HTMLImageElement;street:HTMLImageElement;sprites:HTMLCanvasElement[];gestures:HTMLImageElement;preparation:HTMLImageElement};
 const BOXES=[[40,42,325,465],[396,43,328,463],[765,43,342,468],[1155,43,345,470],[28,525,315,442],[384,565,337,359],[730,525,336,430],[1120,530,339,434]];
 function load(src:string):Promise<HTMLImageElement>{return new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error(`画像を読み込めませんでした: ${src}`));im.src=src})}
 export async function loadArt():Promise<Art>{
- const [room,street,atlas,gestures]=await Promise.all([load(sitePath('bedroom.webp')),load(sitePath('shopping-street.webp')),load(sitePath('character-atlas.webp')),load(sitePath('lily-observation.webp'))]);
+ const [room,street,atlas,gestures,preparation]=await Promise.all([load(sitePath('bedroom.webp')),load(sitePath('shopping-street.webp')),load(sitePath('character-atlas.webp')),load(sitePath('lily-observation.webp')),load(sitePath('lily-prep-animation.webp'))]);
  // The supplied animation atlas uses a neutral color key. Resolve it only in
  // the rendering surface; enclosed costume highlights remain intact.
  const sprites=BOXES.map(([x,y,w,h])=>{
@@ -13,21 +13,63 @@ export async function loadArt():Promise<Art>{
   const add=(p:number)=>{if(p<0||p>=w*h||seen[p])return;seen[p]=1;const i=p*4;const lo=Math.min(d[i],d[i+1],d[i+2]),hi=Math.max(d[i],d[i+1],d[i+2]);if(lo>207&&hi-lo<19){queue[tail++]=p;d[i+3]=0}};
   for(let j=0;j<w;j++){add(j);add((h-1)*w+j)}for(let j=0;j<h;j++){add(j*w);add(j*w+w-1)}
   while(head<tail){const p=queue[head++];if(p%w>0)add(p-1);if(p%w<w-1)add(p+1);add(p-w);add(p+w)}ctx.putImageData(im,0,0);return c;
- });return {room,street,sprites,gestures};
+ });return {room,street,sprites,gestures,preparation};
 }
 function sprite(ctx:CanvasRenderingContext2D,art:Art,id:number,x:number,bottom:number,height:number,flip=false,rotation=0){
  const im=art.sprites[id];const width=height*im.width/im.height;ctx.save();ctx.translate(x,bottom);if(flip)ctx.scale(-1,1);ctx.rotate(rotation);ctx.drawImage(im,-width/2,-height,width,height);ctx.restore();
 }
-// Each row is a set of registered drawings: rest, notice, dismiss.
-function drawObservation(ctx:CanvasRenderingContext2D,game:PuddingGame,atlas:HTMLImageElement,x:number,bottom:number,height:number) {
- const column = {rest:0, notice:1, dismiss:2}[game.observationPose];
- const costumeRow = game.done[3] ? 3 : 1;
- const row = game.activity === 'sleep' ? 0 : costumeRow + Number(game.activity === 'stream');
- const cellWidth = atlas.naturalWidth / 3;
- const cellHeight = atlas.naturalHeight / 5;
+function drawCel(ctx:CanvasRenderingContext2D,atlas:HTMLImageElement,columns:number,rows:number,row:number,column:number,x:number,bottom:number,height:number) {
+ const cellWidth = atlas.naturalWidth / columns;
+ const cellHeight = atlas.naturalHeight / rows;
  const width = height * cellWidth / cellHeight;
  ctx.drawImage(atlas,column*cellWidth,row*cellHeight,cellWidth,cellHeight,
    Math.round(x-width/2),Math.round(bottom-height),Math.round(width),Math.round(height));
+}
+const OBSERVATION_CEL={rest:0,tension:1,glance:2,notice:3,'feint-look':2,'feint-action':4,'feint-settle':5} as const;
+function observationRow(activity:string,dressed:boolean){
+ return activity==='sleep'?0:(dressed?3:1)+Number(activity==='stream');
+}
+function drawWaiting(ctx:CanvasRenderingContext2D,g:PuddingGame,art:Art,x:number,bottom:number,size:number,reducedMotion:boolean){
+ const row=observationRow(g.activity,g.done[3]);
+ const pose=g.observationFrame;
+ if(pose==='dismiss'){
+  drawCel(ctx,art.gestures,3,5,row,2,x,bottom,size);
+  return;
+ }
+ let column=OBSERVATION_CEL[pose];
+ if(reducedMotion){
+  column=g.observationPose==='notice'?3:0;
+ }else if(pose==='rest'){
+  // Hold the exhale longer than the inhale. After 16:00 the idle hand taps twice.
+  if(g.activity==='sleep')column=g.age%3.6>=1.55?5:0;
+  if(g.activity==='idle'&&g.late){
+   const beat=g.age%1.3;
+   column=beat<.13||(beat>.26&&beat<.40)?5:0;
+  }
+ }
+ drawCel(ctx,art.preparation,7,7,row,column,x,bottom,size);
+}
+function drawMotivationSpark(ctx:CanvasRenderingContext2D,x:number,y:number,elapsed:number){
+ const progress=Math.min(1,elapsed/.23);
+ const distance=1-(.90*(1-progress))**3;
+ ctx.save();
+ ctx.globalAlpha=1-progress;
+ for(const [dx,dy,color] of [[-16,-21,'#fff3b1'],[4,-31,'#fff8e3'],[20,-13,'#ffc2df']] as const){
+  const px=Math.round(x+dx*distance),py=Math.round(y+dy*distance);
+  ctx.fillStyle='#795065';ctx.fillRect(px-1,py-1,6,6);
+  ctx.fillStyle=color;ctx.fillRect(px,py,4,4);
+ }
+ ctx.restore();
+}
+function drawToothpaste(ctx:CanvasRenderingContext2D,x:number,bottom:number,size:number,elapsed:number,reducedMotion:boolean){
+ const scale=size/180;
+ const mouthX=x-12*scale,mouthY=bottom-104*scale;
+ for(let i=0;i<(reducedMotion?2:5);i++){
+  const time=reducedMotion?.2+i*.14:(elapsed+i*.16)%.8;
+  const px=Math.round(mouthX-(8+i*2)*time),py=Math.round(mouthY-24*time);
+  ctx.fillStyle='#a7cbdc';ctx.fillRect(px-1,py-1,5,5);
+  ctx.fillStyle='#f5fffc';ctx.fillRect(px,py,3,3);
+ }
 }
 function text(ctx:CanvasRenderingContext2D,value:string,x:number,y:number,size=20,color='#fff5e8',align:CanvasTextAlign='center'){
  ctx.font=`bold ${size}px "Yu Gothic", Meiryo, sans-serif`;ctx.textAlign=align;ctx.textBaseline='middle';ctx.lineWidth=4;ctx.strokeStyle='#49304fe0';ctx.strokeText(value,x,y);ctx.fillStyle=color;ctx.fillText(value,x,y);
@@ -87,31 +129,60 @@ function caramelFloor(ctx:CanvasRenderingContext2D,trap:Trap,x:number){
  }
  if(trap.armed&&trap.elapsed<.35)text(ctx,'パリッ',x+trap.w/2,FLOOR-32,18,'#ffdc88');
 }
-export function renderGame(ctx:CanvasRenderingContext2D,g:PuddingGame,art:Art,t:number,width:number){
+export function renderGame(ctx:CanvasRenderingContext2D,g:PuddingGame,art:Art,t:number,width:number,reducedMotion=false){
  const height=480;ctx.clearRect(0,0,width,height);ctx.imageSmoothingEnabled=false;
  const road=g.travelStarted;const age=g.age;
  if(!road){
   const scale=Math.max(width/art.room.width,height/art.room.height);const iw=art.room.width*scale,ih=art.room.height*scale;
-  const sleeping = g.activity === 'sleep' && g.phase !== 'title';
+  const atBed = (g.activity === 'sleep'||g.activity==='wake') && g.phase !== 'title';
   const bedX = Math.max(90, width*.23);
-  const roomLeft = sleeping ? Math.min(0, Math.max(width-iw,bedX-iw*.23)) : (width-iw)/2;
+  const roomLeft = atBed ? Math.min(0, Math.max(width-iw,bedX-iw*.23)) : (width-iw)/2;
   const roomTop = -(ih-height)*.57;
   ctx.drawImage(art.room,roomLeft,roomTop,iw,ih);
-  if(g.phase==='title'){sprite(ctx,art,3,width*.76,440,300,false,Math.sin(t*1.4)*.015)}
+  if(g.phase==='title'){sprite(ctx,art,3,width*.76,440,300,false,reducedMotion?0:Math.sin(t*1.4)*.015)}
   else{
-   const asleep=g.activity==='sleep';const id=asleep?5:g.activity==='stream'?4:g.activity==='brush'?1:g.activity==='hair'?2:g.done[3]?3:0;
-   let x=asleep?roomLeft+iw*.23:width*.63;let bottom=asleep?roomTop+ih*.60:425;let size=asleep?200:245;
-   let rotation=asleep?Math.sin(t*1.5)*.025:0;
-   if(g.activity==='wake'){bottom-=Math.abs(Math.sin(t*5))*15;rotation=Math.sin(t*5)*.04;}
-   if(g.activity==='brush'){x+=Math.sin(t*22)*2.5;rotation=Math.sin(t*11)*.018;}
-   if(g.activity==='hair'){rotation=Math.sin(t*7)*.035;bottom+=Math.sin(t*7)*3;}
-   if(g.activity==='dress'){const remaining=g.activityUntil-age;const frame=Math.floor(t*9)%2?3:0;sprite(ctx,art,frame,x,bottom,size,false,Math.sin(t*14)*.035);for(let i=0;i<9;i++){const a=t*3+i*.7;text(ctx,'✦',x+Math.cos(a)*95,bottom-120+Math.sin(a)*95,20,'#ffe89d')}if(remaining<.5){ctx.fillStyle=`rgba(255,233,244,${Math.max(0,.5-remaining)})`;ctx.fillRect(0,0,width,height)}}
-   else if(g.activity==='depart'){x+=Math.min(1,1-(g.activityUntil-age)/1.8)*width*.55;sprite(ctx,art,6+Math.floor(t*9)%2,x,bottom,230)}
-   else if(asleep || g.activity==='idle' || g.activity==='stream') drawObservation(ctx,g,art.gestures,x,bottom,size);
-   else sprite(ctx,art,id,x,bottom+Math.sin(t*2)*2,size,false,rotation);
-   if(asleep && g.observationPose === 'rest'){text(ctx,'z',x+57,bottom-107-Math.sin(t)*8,20,'#ead2f4');text(ctx,'Z',x+76,bottom-131-Math.sin(t+1)*10,26,'#ead2f4')}
-   if(g.activity==='brush')for(let i=0;i<5;i++){ctx.fillStyle='#f2faff';ctx.fillRect(x-27+Math.sin(t*5+i)*13,285-i*5+Math.cos(t*7+i)*6,4,4)}
-   if(g.activity==='stream'){ctx.fillStyle='#572c59e0';ctx.fillRect(width*.58-94,65,192,43);text(ctx,'● LIVE   ♡ '+(12+Math.floor(age*3)),width*.58,87,18,'#ffc8df');for(let i=0;i<5;i++)text(ctx,'♥',x+75+Math.sin(i+t)*22,370-((t*45+i*43)%210),20,'#ff95c6')}
+   const x=atBed?roomLeft+iw*.23:width*.63;
+   const bottom=atBed?roomTop+ih*.60:425;
+   const size=atBed?200:245;
+   const actionAge=Math.max(0,age-g.activityStartedAt);
+   const feedback=g.motivationFeedback;
+   if(feedback){
+    drawCel(ctx,art.preparation,7,7,observationRow(feedback.activity,feedback.dressed),6,x,bottom,size);
+   }else if(g.activity==='wake'){
+    const progress=actionAge/Math.max(.01,g.activityUntil-g.activityStartedAt);
+    const column=reducedMotion?2:progress<.24?0:progress<.61?1:2;
+    drawCel(ctx,art.preparation,7,7,5,column,x,bottom,size);
+   }else if(g.activity==='brush'){
+    const beat=actionAge%.72;
+    const column=reducedMotion?1:beat<.19?0:beat<.32?1:beat<.53?2:3;
+    drawCel(ctx,art.preparation,7,7,6,column,x,bottom,size);
+    drawToothpaste(ctx,x,bottom,size,actionAge,reducedMotion);
+   }else if(g.activity==='dress'){
+    const remaining=g.activityUntil-age;
+    sprite(ctx,art,remaining<.95?3:0,x,bottom,size);
+    if(!reducedMotion)for(let i=0;i<6;i++){const a=actionAge*3+i*Math.PI/3;text(ctx,'✦',x+Math.cos(a)*87,bottom-120+Math.sin(a)*89,18,'#ffe89d')}
+   }else if(g.activity==='depart'){
+    const distance=Math.min(1,actionAge/1.8);
+    sprite(ctx,art,reducedMotion?6:6+Math.floor(actionAge*9)%2,x+distance*distance*width*.55,bottom,230);
+   }else if(g.activity==='hair'){
+    sprite(ctx,art,2,x,bottom,size);
+   }else{
+    drawWaiting(ctx,g,art,x,bottom,size,reducedMotion);
+   }
+   if(g.activity==='sleep'&&g.observationFrame==='rest'){
+    const drift=reducedMotion?0:Math.sin(age*1.8)*7;
+    text(ctx,'z',x+57,bottom-107-drift,20,'#ead2f4');text(ctx,'Z',x+76,bottom-131-drift,26,'#ead2f4');
+   }
+   if(g.activity==='stream'||feedback?.activity==='stream'){
+    ctx.fillStyle='#572c59e0';ctx.fillRect(width*.58-94,65,192,43);
+    text(ctx,'● LIVE   ♡ '+(12+Math.floor(age*3)),width*.58,87,18,'#ffc8df');
+    if(!reducedMotion&&g.observationFrame==='rest'&&!feedback)for(let i=0;i<3;i++)text(ctx,'♥',x+75+Math.sin(i+age)*13,370-((age*45+i*63)%185),17,'#ff95c6');
+   }
+   const tap=g.lastMotivation;
+   if(!reducedMotion&&tap&&age-tap.at<.23){
+    const fingertip={sleep:[-38,-79],idle:[-28,-102],stream:[25,-103]}[tap.activity];
+    drawMotivationSpark(ctx,x+fingertip[0]*size/180,bottom+fingertip[1]*size/180,age-tap.at);
+   }
   }
   if(g.late){ctx.fillStyle='#d98e321a';ctx.fillRect(0,0,width,height)}
  }else{
