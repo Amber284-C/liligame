@@ -14,10 +14,13 @@ test('difficulty selection is safe by default, validated and locked during play'
  g.phase='lost';g.start(2000);assert.equal(g.difficulty,'troll');assert.equal(g.touchFriendly,true);
  g.phase='won';g.setDifficulty('normal');g.start(3000);assert.equal(g.difficulty,'normal');
 });
-test('hard miss costs ten minutes, restores checkpoint and remembers discovered traps',()=>{
+test('hard miss holds the impact, then restores the checkpoint with no stale jump',()=>{
  const g=road();g.checkpoint=2510;g.x=2900;const t=trap(g,'ambush');t.armed=t.seen=true;t.elapsed=.4;g.collision('プリンが飛んできた！');
- assert.equal(g.penalties,10);assert.equal(g.x,2510);assert.equal(t.armed,false);assert.equal(t.seen,true);assert.equal(t.elapsed,0);assert.equal(g.hits,1);
- step(g,10);assert.equal(g.x,2510);g.collision();assert.equal(g.hits,1);assert.ok(g.age>0);g.phase='lost';g.start(1234);assert.ok(g.traps.every(t=>!t.armed&&!t.seen));assert.equal(g.hits,0);
+ assert.equal(g.penalties,10);assert.equal(g.x,2900);assert.equal(t.armed,true);assert.equal(g.hits,1);
+ step(g,10,false);assert.equal(g.x,2900);assert.equal(t.elapsed,.4);assert.equal(g.collision(),false);
+ step(g,3,false,true);step(g,3,false);assert.equal(g.x,2510);assert.equal(g.y,392);assert.ok(g.grounded);assert.equal(t.armed,false);assert.equal(t.seen,true);
+ assert.ok(g.noticeUntil>g.age);step(g,2,true,true);assert.ok(g.x>2510);assert.ok(g.y<392);assert.equal(g.hits,1);
+ g.phase='lost';g.start(1234);assert.ok(g.traps.every(t=>!t.armed&&!t.seen));assert.equal(g.hits,0);
 });
 test('hard penalty still enforces the 18:00 deadline immediately',()=>{const g=road();g.age=266;g.collision();assert.equal(g.phase,'lost');assert.equal(g.minute,1080)});
 test('falling pudding punishes rushing but can be baited by waiting',()=>{
@@ -25,7 +28,12 @@ test('falling pudding punishes rushing but can be baited by waiting',()=>{
  const safe=road();safe.x=390;step(safe,60,false);step(safe,50);assert.equal(safe.hits,0);
 });
 test('hidden block cancels the usual jump and becomes visible',()=>{const g=road();g.x=1100;step(g,10,true,true);assert.equal(trap(g,'ceiling').seen,true);assert.ok(g.vy>=0);step(g,60);assert.equal(g.hits,1)});
-test('pavement collapses under a walker and reset retains a crack hint',()=>{const g=road();g.x=1760;step(g,40);assert.equal(g.hits,1);assert.equal(trap(g,'crumble').seen,true);assert.equal(trap(g,'crumble').armed,false)});
+test('walking cracks the caramel, retry shows the crack, jumping clears the same slab',()=>{
+ const g=road();g.x=1760;
+ while(!g.hits&&g.age<2)step(g);assert.equal(g.hits,1);assert.match(g.lastFailure,/カラメル/);assert.ok(g.y<480);
+ const slab=trap(g,'crumble');assert.ok(slab.armed);step(g,20,false);assert.equal(slab.seen,true);assert.equal(slab.armed,false);
+ g.x=1720;step(g,49,true,true);assert.ok(g.x>slab.x+slab.w);assert.equal(g.hits,1);
+});
 test('flying pudding catches a jump while a grounded player can let it pass',()=>{
  const g=road();g.x=2680;step(g,12);step(g,30,true,true);assert.equal(g.hits,1);assert.match(g.lastFailure,/飛んで/);
  const safe=road();safe.x=2680;step(safe,75,false);assert.equal(safe.hits,0);assert.ok(safe.trapBounds(trap(safe,'ambush')).x<safe.x);

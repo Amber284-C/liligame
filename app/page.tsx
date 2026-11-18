@@ -41,7 +41,7 @@ export default function Home(){
    if(canvas.current&&art.current&&now-lastDraw>=(model.touchFriendly?1000/30:1000/60)){
     lastDraw=now;const ctx=canvas.current.getContext('2d');if(ctx)renderGame(ctx,model,art.current,now/1000,canvasWidth);
    }
-   if(now-lastUI>=100){lastUI=now;update(v=>v+1)}frame=requestAnimationFrame(loop);
+   if(model.hits!==oldHits||model.phase!==oldPhase||now-lastUI>=100){lastUI=now;update(v=>v+1)}frame=requestAnimationFrame(loop);
   };
   frame=requestAnimationFrame(loop);
   const clear=()=>{input.current.clear();document.querySelectorAll<HTMLElement>('.touch-controls [data-pressed]').forEach(button=>delete button.dataset.pressed)};
@@ -100,6 +100,6 @@ export default function Home(){
  <div className="prep-list">{STEPS.map((s,i)=><div className={'prep-step '+(g.done[i]?'complete':(g.pending>=0?g.pending:g.nextStep)===i?'current':'')} key={s}><span className="step-number">{g.done[i]?<Check size={14}/>:i+1}</span><span>{s}{i===1&&<small className="auto-step-label">自動</small>}</span>{i<4&&<span className="step-arrow">›</span>}</div>)}</div>
  </section>
  <section className="day-timeline" aria-label="一日のタイムライン"><div className="timeline-track"><div className="early-zone"/><div className="late-zone"/><Progress value={(g.minute-540)/540*100} aria-label="一日の経過"/><span className="timeline-now" style={{left:`${(g.minute-540)/540*100}%`}} /></div><div className="timeline-labels"><span><b>09:00</b>おはよう…？</span><span><b>11:00</b>強制おめざめ</span><span><b>16:00</b><Sparkles size={13}/>やる気、覚醒</span><span><b>18:00</b>閉店ガラガラ</span></div></section>
- <footer className="game-footer"><div><span className="tip-label">あそびかた</span><p>{g.travelStarted?<>← → / A D で移動、<b>Space / ↑ でジャンプ。</b> 箱と穴に注意！</>:<>現れては消える <b>やる気スイッチ</b> をクリック／タップ。</>}</p></div><span className="footer-comment"><Heart size={14}/> やる気がないのも、仕様です。</span></footer>
+ <footer className="game-footer"><div><span className="tip-label">あそびかた</span><p>{g.travelStarted?<>← → / A D で移動、<b>Space / ↑ でジャンプ。</b> 箱と穴に注意！</>:<>リリーの<b>目と手</b>に注目。合図のあとに、やる気スイッチをタップ。</>}</p></div><span className="footer-comment"><Heart size={14}/> やる気がないのも、仕様です。</span></footer>
  </main>
 }
